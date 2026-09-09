@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'calls_page.dart';
 import 'chat_page.dart';
 import 'new_chat_page.dart';
+import 'profile_page.dart';
 import 'search_page.dart';
 import 'status_page.dart';
 import 'services/presence_service.dart';
@@ -22,29 +23,12 @@ Future<void> main() async {
 
 class GGApp extends StatelessWidget {
   const GGApp({super.key});
-
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'GG Messenger',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: Colors.indigo,
-          brightness: Brightness.light,
-          inputDecorationTheme: const InputDecorationTheme(
-            filled: true,
-            border: OutlineInputBorder(borderSide: BorderSide.none),
-          ),
-        ),
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: Colors.indigo,
-          brightness: Brightness.dark,
-          inputDecorationTheme: const InputDecorationTheme(
-            filled: true,
-            border: OutlineInputBorder(borderSide: BorderSide.none),
-          ),
-        ),
+        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo, brightness: Brightness.light, inputDecorationTheme: const InputDecorationTheme(filled: true, border: OutlineInputBorder(borderSide: BorderSide.none))),
+        darkTheme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo, brightness: Brightness.dark, inputDecorationTheme: const InputDecorationTheme(filled: true, border: OutlineInputBorder(borderSide: BorderSide.none))),
         themeMode: ThemeMode.system,
         home: const AuthGate(),
       );
@@ -52,19 +36,15 @@ class GGApp extends StatelessWidget {
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
-
   @override
   Widget build(BuildContext context) => StreamBuilder<AuthState>(
         stream: Supabase.instance.client.auth.onAuthStateChange,
-        builder: (_, __) => Supabase.instance.client.auth.currentSession == null
-            ? const LoginPage()
-            : const HomePage(),
+        builder: (_, __) => Supabase.instance.client.auth.currentSession == null ? const LoginPage() : const HomePage(),
       );
 }
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
-
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -82,21 +62,12 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => error = 'Enter a valid email and a password of at least 6 characters.');
       return;
     }
-    setState(() {
-      loading = true;
-      error = null;
-    });
+    setState(() { loading = true; error = null; });
     try {
       final auth = Supabase.instance.client.auth;
       if (signUp) {
-        final result = await auth.signUp(
-          email: email.text.trim(),
-          password: password.text,
-          data: {'display_name': email.text.trim().split('@').first},
-        );
-        if (result.session == null && mounted) {
-          setState(() => error = 'Check your email to confirm your account.');
-        }
+        final result = await auth.signUp(email: email.text.trim(), password: password.text, data: {'display_name': email.text.trim().split('@').first});
+        if (result.session == null && mounted) setState(() => error = 'Check your email to confirm your account.');
       } else {
         await auth.signInWithPassword(email: email.text.trim(), password: password.text);
       }
@@ -111,10 +82,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> resetPassword() async {
     final value = email.text.trim();
-    if (!value.contains('@')) {
-      setState(() => error = 'Enter your email first.');
-      return;
-    }
+    if (!value.contains('@')) { setState(() => error = 'Enter your email first.'); return; }
     setState(() => loading = true);
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(value);
@@ -127,11 +95,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   @override
-  void dispose() {
-    email.dispose();
-    password.dispose();
-    super.dispose();
-  }
+  void dispose() { email.dispose(); password.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -143,60 +107,20 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.forum_rounded, size: 54, color: Theme.of(context).colorScheme.primary),
-                  ),
+                  Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, shape: BoxShape.circle), child: Icon(Icons.forum_rounded, size: 54, color: Theme.of(context).colorScheme.primary)),
                   const SizedBox(height: 18),
                   Text('GG Messenger', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
                   Text(signUp ? 'Create your account' : 'Private, fast and realtime messaging'),
                   const SizedBox(height: 30),
-                  TextField(
-                    controller: email,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
-                  ),
+                  TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined))),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: password,
-                    obscureText: obscure,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => obscure = !obscure),
-                        icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
-                      ),
-                    ),
-                  ),
-                  if (!signUp)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(onPressed: loading ? null : resetPassword, child: const Text('Forgot password?')),
-                    ),
+                  TextField(controller: password, obscureText: obscure, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => obscure = !obscure), icon: Icon(obscure ? Icons.visibility : Icons.visibility_off)))),
+                  if (!signUp) Align(alignment: Alignment.centerRight, child: TextButton(onPressed: loading ? null : resetPassword, child: const Text('Forgot password?'))),
                   const SizedBox(height: 8),
-                  if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.primary), textAlign: TextAlign.center),
-                    ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: loading ? null : submit,
-                      icon: const Icon(Icons.arrow_forward_rounded),
-                      label: Text(loading ? 'Please wait...' : signUp ? 'Create account' : 'Sign in'),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: loading ? null : () => setState(() { signUp = !signUp; error = null; }),
-                    child: Text(signUp ? 'Already have an account? Sign in' : 'New here? Create an account'),
-                  ),
+                  if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.primary), textAlign: TextAlign.center)),
+                  SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading ? null : submit, icon: const Icon(Icons.arrow_forward_rounded), label: Text(loading ? 'Please wait...' : signUp ? 'Create account' : 'Sign in'))),
+                  TextButton(onPressed: loading ? null : () => setState(() { signUp = !signUp; error = null; }), child: Text(signUp ? 'Already have an account? Sign in' : 'New here? Create an account')),
                 ],
               ),
             ),
@@ -207,7 +131,6 @@ class _LoginPageState extends State<LoginPage> {
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -221,17 +144,12 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     presence = PresenceService(Supabase.instance.client);
-    presence.onlineUsers.listen((users) {
-      if (mounted) setState(() => onlineUsers = users);
-    });
+    presence.onlineUsers.listen((users) { if (mounted) setState(() => onlineUsers = users); });
     presence.start();
   }
 
   @override
-  void dispose() {
-    presence.dispose();
-    super.dispose();
-  }
+  void dispose() { presence.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -240,11 +158,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('GG Messenger', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
-          IconButton(
-            tooltip: 'Search',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())),
-            icon: const Icon(Icons.search_rounded),
-          ),
+          IconButton(tooltip: 'Search', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())), icon: const Icon(Icons.search_rounded)),
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'settings') {
@@ -254,21 +168,12 @@ class _HomePageState extends State<HomePage> {
                 await Supabase.instance.client.auth.signOut();
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'settings', child: Text('Settings')),
-              PopupMenuItem(value: 'logout', child: Text('Log out')),
-            ],
+            itemBuilder: (_) => const [PopupMenuItem(value: 'settings', child: Text('Settings')), PopupMenuItem(value: 'logout', child: Text('Log out'))],
           ),
         ],
       ),
       body: IndexedStack(index: tab, children: pages),
-      floatingActionButton: tab == 0
-          ? FloatingActionButton.extended(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatPage())),
-              icon: const Icon(Icons.chat_rounded),
-              label: const Text('New chat'),
-            )
-          : null,
+      floatingActionButton: tab == 0 ? FloatingActionButton.extended(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewChatPage())), icon: const Icon(Icons.chat_rounded), label: const Text('New chat')) : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (index) => setState(() => tab = index),
@@ -305,26 +210,10 @@ class ChatsPage extends StatelessWidget {
               final isOnline = participantId != null && onlineUsers.contains(participantId);
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    CircleAvatar(radius: 26, child: Text(initial, style: const TextStyle(fontWeight: FontWeight.bold))),
-                    if (isOnline)
-                      Positioned(
-                        right: -1,
-                        bottom: 0,
-                        child: Container(
-                          width: 14,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                leading: Stack(clipBehavior: Clip.none, children: [
+                  CircleAvatar(radius: 26, child: Text(initial, style: const TextStyle(fontWeight: FontWeight.bold))),
+                  if (isOnline) Positioned(right: -1, bottom: 0, child: Container(width: 14, height: 14, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2)))),
+                ]),
                 title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text((chat['last_message'] ?? 'Tap to open').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: const Icon(Icons.chevron_right),
@@ -338,7 +227,6 @@ class ChatsPage extends StatelessWidget {
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
-
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
@@ -352,6 +240,7 @@ class SettingsPage extends StatelessWidget {
             accountName: Text(user?.userMetadata?['display_name']?.toString() ?? 'GG User'),
             accountEmail: Text(user?.email ?? ''),
           ),
+          ListTile(leading: const Icon(Icons.person_outline), title: const Text('Edit profile'), subtitle: const Text('Change your name, username and bio.'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()))),
           const ListTile(leading: Icon(Icons.lock_outline), title: Text('Privacy'), subtitle: Text('Your chats are protected by Supabase authentication and RLS.')),
           const ListTile(leading: Icon(Icons.data_usage_outlined), title: Text('Data saver'), subtitle: Text('Text-first messaging and controlled media downloads.')),
           const ListTile(leading: Icon(Icons.notifications_none), title: Text('Notifications'), subtitle: Text('Realtime message events are handled by Supabase.')),
