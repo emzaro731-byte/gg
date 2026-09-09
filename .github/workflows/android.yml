@@ -31,38 +31,66 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          p = Path('android/app/build.gradle')
-          s = p.read_text()
+          groovy = Path('android/app/build.gradle')
+          kotlin = Path('android/app/build.gradle.kts')
 
-          # Flutter plugins in this project require core library desugaring.
-          # Make the setting explicit and add the required desugaring library.
-          if 'coreLibraryDesugaringEnabled' not in s:
-              needle = 'android {'
-              if needle not in s:
-                  raise SystemExit('android { block not found in android/app/build.gradle')
-              s = s.replace(
-                  needle,
-                  needle + '''\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n    }''',
-                  1,
-              )
+          if kotlin.exists():
+              p = kotlin
+              s = p.read_text()
 
-          dependency = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
-          if 'desugar_jdk_libs' not in s:
-              if '\ndependencies {' in s:
-                  s = s.replace(
-                      '\ndependencies {',
-                      '\ndependencies {\n    ' + dependency,
-                      1,
-                  )
-              else:
-                  s += '\n\ndependencies {\n    ' + dependency + '\n}\n'
+              if 'isCoreLibraryDesugaringEnabled = true' not in s:
+                  if 'compileOptions {' in s:
+                      s = s.replace(
+                          'compileOptions {',
+                          'compileOptions {\n        isCoreLibraryDesugaringEnabled = true',
+                          1,
+                      )
+                  else:
+                      s = s.replace(
+                          'android {',
+                          'android {\n    compileOptions {\n        isCoreLibraryDesugaringEnabled = true\n    }',
+                          1,
+                      )
+
+              if 'desugar_jdk_libs' not in s:
+                  dependency = '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+                  if 'dependencies {' in s:
+                      s = s.replace('dependencies {', 'dependencies {\n' + dependency, 1)
+                  else:
+                      s += '\n\ndependencies {\n' + dependency + '\n}\n'
+          elif groovy.exists():
+              p = groovy
+              s = p.read_text()
+
+              if 'coreLibraryDesugaringEnabled true' not in s:
+                  if 'compileOptions {' in s:
+                      s = s.replace(
+                          'compileOptions {',
+                          'compileOptions {\n        coreLibraryDesugaringEnabled true',
+                          1,
+                      )
+                  else:
+                      s = s.replace(
+                          'android {',
+                          'android {\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n    }',
+                          1,
+                      )
+
+              if 'desugar_jdk_libs' not in s:
+                  dependency = "    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
+                  if 'dependencies {' in s:
+                      s = s.replace('dependencies {', 'dependencies {\n' + dependency, 1)
+                  else:
+                      s += '\n\ndependencies {\n' + dependency + '\n}\n'
+          else:
+              raise SystemExit('Neither android/app/build.gradle nor build.gradle.kts exists')
 
           p.write_text(s)
-          print('Updated android/app/build.gradle for core library desugaring')
+          print(f'Updated {p} for core library desugaring')
           PY
 
-          echo '--- android/app/build.gradle desugaring configuration ---'
-          grep -n -A5 -B2 'desugar\|coreLibraryDesugaring\|compileOptions' android/app/build.gradle || true
+          echo '--- Android desugaring configuration ---'
+          grep -R -n -A5 -B2 'desugar\|coreLibraryDesugaring\|compileOptions' android/app/build.gradle android/app/build.gradle.kts 2>/dev/null || true
 
       - name: Configure Android permissions
         shell: bash
