@@ -8,12 +8,31 @@ class CallsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return const Center(child: Text('Sign in to view calls.'));
+
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client.from('call_sessions').stream(primaryKey: ['id']).order('created_at', ascending: false),
+      stream: Supabase.instance.client
+          .from('call_sessions')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false),
       builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Text('Unable to load calls: ${snapshot.error}'));
-        final calls = (snapshot.data ?? []).where((c) => c['caller_id'] == userId || c['callee_id'] == userId).toList();
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Unable to load calls. Please run the latest Supabase migration.\n\n${snapshot.error}',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        final calls = (snapshot.data ?? [])
+            .where((c) => c['caller_id'] == userId || c['callee_id'] == userId)
+            .toList();
+
         if (calls.isEmpty) return const Center(child: Text('No calls yet'));
+
         return ListView.separated(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           itemCount: calls.length,
@@ -21,11 +40,16 @@ class CallsPage extends StatelessWidget {
           itemBuilder: (context, i) {
             final call = calls[i];
             final outgoing = call['caller_id'] == userId;
-            final video = call['call_type']?.toString() == 'video';
+            final video = call['kind']?.toString() == 'video';
             final status = call['status']?.toString() ?? 'ended';
             return ListTile(
-              leading: CircleAvatar(child: Icon(video ? Icons.videocam_outlined : Icons.call_outlined)),
-              title: Text(outgoing ? 'Outgoing call' : 'Incoming call', style: const TextStyle(fontWeight: FontWeight.w700)),
+              leading: CircleAvatar(
+                child: Icon(video ? Icons.videocam_outlined : Icons.call_outlined),
+              ),
+              title: Text(
+                outgoing ? 'Outgoing call' : 'Incoming call',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
               subtitle: Text(status == 'missed' ? 'Missed call' : status),
               trailing: Icon(outgoing ? Icons.call_made : Icons.call_received),
             );
