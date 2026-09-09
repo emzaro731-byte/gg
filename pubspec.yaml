@@ -1,7 +1,7 @@
 name: gg_messenger
 description: A modern, secure realtime messenger built with Flutter and Supabase.
 publish_to: 'none'
-version: 0.10.0+10
+version: 0.11.0+11
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -16,6 +16,7 @@ dependencies:
   http: ^1.6.0
   connectivity_plus: ^6.1.5
   file_picker: ^10.3.3
+  image_picker: ^1.2.0
   image: ^4.5.4
   flutter_webrtc: ^1.6.2+hotfix.1
   record: ^7.1.1
