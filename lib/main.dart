@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'calls_page.dart';
 import 'chat_page.dart';
 import 'new_chat_page.dart';
+import 'search_page.dart';
 import 'status_page.dart';
 import 'services/presence_service.dart';
 
@@ -241,7 +242,7 @@ class _HomePageState extends State<HomePage> {
         actions: [
           IconButton(
             tooltip: 'Search',
-            onPressed: () => showSearch(context: context, delegate: _AppSearchDelegate()),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())),
             icon: const Icon(Icons.search_rounded),
           ),
           PopupMenuButton<String>(
@@ -359,20 +360,4 @@ class SettingsPage extends StatelessWidget {
       ),
     );
   }
-}
-
-class _AppSearchDelegate extends SearchDelegate<String> {
-  @override
-  List<Widget>? buildActions(BuildContext context) => [IconButton(onPressed: () => query = '', icon: const Icon(Icons.clear))];
-
-  @override
-  Widget? buildLeading(BuildContext context) => IconButton(onPressed: () => close(context, ''), icon: const Icon(Icons.arrow_back));
-
-  @override
-  Widget buildResults(BuildContext context) => _searchBody();
-
-  @override
-  Widget buildSuggestions(BuildContext context) => _searchBody();
-
-  Widget _searchBody() => Center(child: Text(query.trim().isEmpty ? 'Search chats and people' : 'Search results for “$query”'));
 }
