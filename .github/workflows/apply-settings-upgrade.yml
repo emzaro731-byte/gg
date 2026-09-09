@@ -1,0 +1,168 @@
+name: Apply settings and notifications upgrade
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/services/app_settings_service.dart'
+      - 'lib/services/notification_service.dart'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch main.dart
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('lib/main.dart')
+          text = path.read_text()
+
+          imports = "import 'services/app_settings_service.dart';\nimport 'services/notification_service.dart';\n"
+          marker = "import 'services/presence_service.dart';\n"
+          if "services/app_settings_service.dart" not in text:
+              text = text.replace(marker, marker + imports)
+
+          old = """    await Supabase.initialize(\n      url: AppConfig.supabaseUrl,\n      publishableKey: AppConfig.supabasePublishableKey,\n      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),\n      realtimeClientOptions: const RealtimeClientOptions(logLevel: RealtimeLogLevel.error),\n      storageOptions: const StorageClientOptions(retryAttempts: 3),\n    );\n    runApp(const GGApp());"""
+          new = """    await Supabase.initialize(\n      url: AppConfig.supabaseUrl,\n      publishableKey: AppConfig.supabasePublishableKey,\n      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),\n      realtimeClientOptions: const RealtimeClientOptions(logLevel: RealtimeLogLevel.error),\n      storageOptions: const StorageClientOptions(retryAttempts: 3),\n    );\n    await NotificationService.instance.initialize();\n    runApp(const GGApp());"""
+          if old in text:
+              text = text.replace(old, new)
+
+          text = text.replace("""  late final PresenceService presence;\n  Set<String> onlineUsers = <String>{};""", """  late final PresenceService presence;\n  Set<String> onlineUsers = <String>{};\n  final AppSettingsService appSettings = AppSettingsService();\n  RealtimeChannel? notificationChannel;""")
+
+          text = text.replace("""    presence.start();\n  }\n\n  @override\n  void dispose() { presence.dispose(); super.dispose(); }""", """    presence.start();\n    _startMessageNotifications();\n  }\n\n  Future<void> _startMessageNotifications() async {\n    await appSettings.load();\n    if (!mounted) return;\n    if (appSettings.notificationsEnabled) {\n      await NotificationService.instance.requestPermission();\n    }\n    notificationChannel = Supabase.instance.client\n        .channel('gg-message-notifications')\n        .onPostgresChanges(\n          event: PostgresChangeEvent.insert,\n          schema: 'public',\n          table: 'messages',\n          callback: (payload) async {\n            final record = payload.newRecord;\n            final currentUserId = Supabase.instance.client.auth.currentUser?.id;\n            if (currentUserId == null || record['sender_id']?.toString() == currentUserId) return;\n            await NotificationService.instance.showMessage(\n              title: 'GG Messenger',\n              body: record['body']?.toString() ?? 'New message',\n              enabled: appSettings.notificationsEnabled,\n              privateMode: appSettings.privateModeEnabled,\n            );\n          },\n        )\n        .subscribe();\n  }\n\n  @override\n  void dispose() {\n    presence.dispose();\n    final channel = notificationChannel;\n    if (channel != null) Supabase.instance.client.removeChannel(channel);\n    super.dispose();\n  }""")
+
+          start = text.index('class SettingsPage extends StatelessWidget {')
+          end = text.index('class _SettingsSection extends StatelessWidget {', start)
+          replacement = r'''class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final AppSettingsService settings = AppSettingsService();
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await settings.load();
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _setNotifications(bool value) async {
+    await settings.setNotifications(value);
+    if (value) await NotificationService.instance.requestPermission();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setDataSaver(bool value) async {
+    await settings.setDataSaver(value);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setPrivateMode(bool value) async {
+    await settings.setPrivateMode(value);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = Supabase.instance.client.auth.currentUser;
+    final metadata = user?.userMetadata ?? const <String, dynamic>{};
+    final displayName = metadata['display_name']?.toString() ?? 'GG User';
+    final username = metadata['username']?.toString();
+    if (loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Settings')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Theme.of(context).colorScheme.primaryContainer, Theme.of(context).colorScheme.tertiaryContainer]),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Row(children: [
+            CircleAvatar(radius: 30, child: Text(displayName.isEmpty ? 'G' : displayName[0].toUpperCase(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
+            const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(displayName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)), const SizedBox(height: 3), Text(username?.isNotEmpty == true ? '@$username' : user?.email ?? '', overflow: TextOverflow.ellipsis)])),
+          ]),
+        ),
+        const SizedBox(height: 18),
+        _SettingsSection(title: 'Account', children: [
+          ListTile(leading: const Icon(Icons.person_outline_rounded), title: const Text('Edit profile'), subtitle: const Text('Name, username and bio'), trailing: const Icon(Icons.chevron_right_rounded), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()))),
+          ListTile(leading: const Icon(Icons.email_outlined), title: const Text('Email'), subtitle: Text(user?.email ?? '')),
+        ]),
+        const SizedBox(height: 12),
+        _SettingsSection(title: 'Messaging & Privacy', children: [
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.notifications_active_outlined),
+            title: const Text('Notifications'),
+            subtitle: const Text('Get alerts for new messages'),
+            value: settings.notificationsEnabled,
+            onChanged: _setNotifications,
+          ),
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.data_saver_on_outlined),
+            title: const Text('Data saver'),
+            subtitle: const Text('Reduce media and network usage'),
+            value: settings.dataSaverEnabled,
+            onChanged: _setDataSaver,
+          ),
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.lock_outline_rounded),
+            title: const Text('Private mode'),
+            subtitle: const Text('Hide message text in notifications'),
+            value: settings.privateModeEnabled,
+            onChanged: _setPrivateMode,
+          ),
+        ]),
+        const SizedBox(height: 12),
+        _SettingsSection(title: 'Session', children: [
+          ListTile(leading: const Icon(Icons.logout_rounded), title: const Text('Log out'), onTap: () => Supabase.instance.client.auth.signOut()),
+        ]),
+      ]),
+    );
+  }
+}
+
+'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text)
+          print('main.dart upgraded')
+      - name: Verify and build web
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter build web --release --base-href "/gg/"
+
+      - name: Commit upgrade
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart
+          if git diff --cached --quiet; then
+            echo "No main.dart changes needed"
+            exit 0
+          fi
+          git commit -m "feat: enable notification data saver and private settings"
+          git push
