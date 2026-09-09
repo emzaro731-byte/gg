@@ -13,15 +13,25 @@ import 'services/presence_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!AppConfig.isConfigured) { runApp(const ConfigurationErrorApp()); return; }
-  await Supabase.initialize(
-    url: AppConfig.supabaseUrl,
-    publishableKey: AppConfig.supabasePublishableKey,
-    authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
-    realtimeClientOptions: const RealtimeClientOptions(logLevel: RealtimeLogLevel.error),
-    storageOptions: const StorageClientOptions(retryAttempts: 3),
-  );
-  runApp(const GGApp());
+  if (!AppConfig.isConfigured) {
+    runApp(const ConfigurationErrorApp());
+    return;
+  }
+
+  try {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      publishableKey: AppConfig.supabasePublishableKey,
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+      realtimeClientOptions: const RealtimeClientOptions(logLevel: RealtimeLogLevel.error),
+      storageOptions: const StorageClientOptions(retryAttempts: 3),
+    );
+    runApp(const GGApp());
+  } catch (error, stackTrace) {
+    debugPrint('GG Messenger startup failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    runApp(StartupErrorApp(error: error.toString()));
+  }
 }
 
 class ConfigurationErrorApp extends StatelessWidget {
@@ -30,8 +40,79 @@ class ConfigurationErrorApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF6750A4)),
-    home: const Scaffold(body: Center(child: Padding(padding: EdgeInsets.all(28), child: Text('GG Messenger needs configuration. Provide SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY using --dart-define.', textAlign: TextAlign.center)))),
+    home: const Scaffold(
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(28),
+          child: Text(
+            'GG Messenger needs configuration. Provide SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY using --dart-define.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ),
   );
+}
+
+class StartupErrorApp extends StatelessWidget {
+  const StartupErrorApp({super.key, required this.error});
+  final String error;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF7C4DFF),
+        brightness: Brightness.dark,
+      ),
+      scaffoldBackgroundColor: const Color(0xFF08070C),
+    ),
+    home: Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Card(
+                color: const Color(0xFF15131B),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFB69CFF)),
+                      const SizedBox(height: 16),
+                      const Text('GG Messenger could not start', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 10),
+                      const Text('The web app loaded, but initialization failed. This screen replaces the blank white page so the actual error can be diagnosed.'),
+                      const SizedBox(height: 18),
+                      SelectableText(error, style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () => _reload(),
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Reload'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  void _reload() {
+    // A full browser reload is intentionally avoided here so the error screen
+    // also works in Flutter's web-server test environment. The user can use
+    // the browser reload control after seeing the diagnostic.
+  }
 }
 
 class GGApp extends StatelessWidget {
