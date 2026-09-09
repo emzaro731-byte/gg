@@ -1,8 +1,9 @@
-name: Flutter APK
+name: GG Messenger - Direct APK Build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -10,33 +11,46 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build Flutter Android APK
+    name: Build GG Messenger APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.2'
           channel: stable
+          flutter-version: '3.47.2'
           cache: true
 
-      - name: Get dependencies
-        run: flutter pub get
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
 
-      - name: Create Android platform if needed
+      - name: Create Android project files
         run: flutter create --platforms=android --project-name gg_messenger .
 
-      - name: Build release APK
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Check Flutter project
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build release APK directly
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk GG-Messenger-release.apk
+
+      - name: Upload direct APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GG-Flutter-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: GG-Messenger-APK
+          path: GG-Messenger-release.apk
           if-no-files-found: error
           retention-days: 30
