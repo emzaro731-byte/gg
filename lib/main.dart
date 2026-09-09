@@ -8,6 +8,7 @@ import 'profile_page.dart';
 import 'search_page.dart';
 import 'status_page.dart';
 import 'premium_chats_page.dart';
+import 'offline_first_chats_page.dart';
 import 'email_password_auth_page.dart' as email_auth;
 import 'services/app_settings_service.dart';
 import 'services/notification_service.dart';
@@ -341,7 +342,7 @@ class _HomePageState extends State<HomePage> {
     final name = user?.userMetadata?['display_name']?.toString();
     final username = user?.userMetadata?['username']?.toString();
     final pages = [
-      PremiumChatsPage(onlineUsers: onlineUsers),
+      OfflineFirstChatsPage(onlineUsers: onlineUsers),
       const StatusPage(),
       const CallsPage(),
     ];
