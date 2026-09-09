@@ -53,6 +53,9 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Apply passwordless phone OTP authentication
+        run: python3 tool/apply_phone_otp_auth.py
+
       - name: Get dependencies
         run: flutter pub get
 
@@ -60,22 +63,10 @@ jobs:
         run: flutter analyze
 
       - name: Build release APK
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          flutter build apk --release \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+        run: flutter build apk --release
 
       - name: Build release App Bundle
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          flutter build appbundle --release \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
+        run: flutter build appbundle --release
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
