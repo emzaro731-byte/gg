@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+// OpenAI GPT-OSS 120B, served through Groq.
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") || "openai/gpt-oss-120b";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
@@ -36,7 +37,7 @@ function modeInstruction(mode: string): string {
 
 const BASE_SYSTEM_PROMPT = `
 You are GG AI, the intelligent AI assistant built into GG Messenger.
-You are powered by Groq.
+You are powered by OpenAI GPT-OSS 120B through Groq.
 
 Core behavior:
 - Give accurate, useful and natural answers.
@@ -110,6 +111,7 @@ serve(async (req) => {
         messages: [{ role: "system", content: systemParts.join("\n\n") }, ...messages],
         temperature,
         max_tokens: maxTokens,
+        reasoning_effort: "medium",
       }),
     });
 
