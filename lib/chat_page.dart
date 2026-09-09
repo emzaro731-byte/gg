@@ -298,7 +298,7 @@ class _ChatPageState extends State<ChatPage> {
     }
     return Container(
       padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), color: Theme.of(context).colorScheme.surface.withOpacity(.35)),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), color: Theme.of(context).colorScheme.surface.withValues(alpha: .35)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(type == 'video' ? Icons.video_file_rounded : Icons.insert_drive_file_rounded),
         const SizedBox(width: 9),
@@ -325,7 +325,7 @@ class _ChatPageState extends State<ChatPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(.72),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
@@ -352,16 +352,16 @@ class _ChatPageState extends State<ChatPage> {
           padding: const EdgeInsets.fromLTRB(14, 10, 11, 7),
           decoration: BoxDecoration(
             gradient: mine
-                ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primaryContainer, scheme.primaryContainer.withOpacity(.82)])
+                ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primaryContainer, scheme.primaryContainer.withValues(alpha: .82)])
                 : null,
-            color: mine ? null : scheme.surfaceContainerHighest.withOpacity(.86),
+            color: mine ? null : scheme.surfaceContainerHighest.withValues(alpha: .86),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(19),
               topRight: const Radius.circular(19),
               bottomLeft: Radius.circular(mine ? 19 : 5),
               bottomRight: Radius.circular(mine ? 5 : 19),
             ),
-            border: Border.all(color: scheme.outline.withOpacity(.09)),
+            border: Border.all(color: scheme.outline.withValues(alpha: .09)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (message['reply_to'] != null)
@@ -369,7 +369,7 @@ class _ChatPageState extends State<ChatPage> {
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 7),
                 padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
-                decoration: BoxDecoration(color: scheme.primary.withOpacity(.10), borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(color: scheme.primary.withValues(alpha: .10), borderRadius: BorderRadius.circular(10)),
                 child: const Row(children: [Icon(Icons.reply_rounded, size: 14), SizedBox(width: 5), Text('Reply', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))]),
               ),
             if (type == 'text') Text(body, style: const TextStyle(fontSize: 16, height: 1.28)) else mediaPreview(message),
@@ -392,8 +392,8 @@ class _ChatPageState extends State<ChatPage> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
         decoration: BoxDecoration(
-          color: scheme.surface.withOpacity(.96),
-          border: Border(top: BorderSide(color: scheme.outline.withOpacity(.08))),
+          color: scheme.surface.withValues(alpha: .96),
+          border: Border(top: BorderSide(color: scheme.outline.withValues(alpha: .08))),
         ),
         child: Column(children: [
           if (editingId != null || replyingTo != null)
@@ -401,7 +401,7 @@ class _ChatPageState extends State<ChatPage> {
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 7),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(color: scheme.primaryContainer.withOpacity(.45), borderRadius: BorderRadius.circular(15)),
+              decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: .45), borderRadius: BorderRadius.circular(15)),
               child: Row(children: [
                 Icon(editingId != null ? Icons.edit_rounded : Icons.reply_rounded, size: 18, color: scheme.primary),
                 const SizedBox(width: 8),
@@ -418,9 +418,9 @@ class _ChatPageState extends State<ChatPage> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest.withOpacity(.58),
+                  color: scheme.surfaceContainerHighest.withValues(alpha: .58),
                   borderRadius: BorderRadius.circular(25),
-                  border: Border.all(color: scheme.outline.withOpacity(.10)),
+                  border: Border.all(color: scheme.outline.withValues(alpha: .10)),
                 ),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   IconButton(
@@ -524,7 +524,7 @@ class _ChatPageState extends State<ChatPage> {
               final items = snapshot.data ?? [];
               if (items.isEmpty) {
                 return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.primaryContainer.withOpacity(.55)), child: Icon(Icons.waving_hand_rounded, size: 42, color: scheme.primary)),
+                  Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.primaryContainer.withValues(alpha: .55)), child: Icon(Icons.waving_hand_rounded, size: 42, color: scheme.primary)),
                   const SizedBox(height: 14),
                   Text('Start a conversation', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 5),

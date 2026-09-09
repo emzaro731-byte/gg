@@ -175,10 +175,10 @@ class _GlassCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: scheme.surface.withOpacity(.72),
+        color: scheme.surface.withValues(alpha: .72),
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: scheme.outline.withOpacity(.12)),
-        boxShadow: [BoxShadow(color: scheme.shadow.withOpacity(.08), blurRadius: 24, offset: const Offset(0, 8))],
+        border: Border.all(color: scheme.outline.withValues(alpha: .12)),
+        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .08), blurRadius: 24, offset: const Offset(0, 8))],
       ),
       child: child,
     );

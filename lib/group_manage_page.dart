@@ -182,9 +182,9 @@ class _GroupManagePageState extends State<GroupManagePage> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(.42),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .42),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(.25)),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: .25)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -278,11 +278,11 @@ class _GroupManagePageState extends State<GroupManagePage> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          scheme.primaryContainer.withOpacity(.85),
-                          scheme.surfaceContainerHighest.withOpacity(.65),
+                          scheme.primaryContainer.withValues(alpha: .85),
+                          scheme.surfaceContainerHighest.withValues(alpha: .65),
                         ],
                       ),
-                      border: Border.all(color: scheme.outline.withOpacity(.16)),
+                      border: Border.all(color: scheme.outline.withValues(alpha: .16)),
                     ),
                     child: Column(
                       children: [
@@ -352,7 +352,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
                           ? null
                           : IconButton(onPressed: _searchController.clear, icon: const Icon(Icons.close_rounded)),
                       filled: true,
-                      fillColor: scheme.surfaceContainerHighest.withOpacity(.45),
+                      fillColor: scheme.surfaceContainerHighest.withValues(alpha: .45),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
                     ),
                   ),
@@ -379,7 +379,7 @@ class _GroupManagePageState extends State<GroupManagePage> {
                     label: const Text('Leave group'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: scheme.error,
-                      side: BorderSide(color: scheme.error.withOpacity(.45)),
+                      side: BorderSide(color: scheme.error.withValues(alpha: .45)),
                       minimumSize: const Size.fromHeight(52),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
                     ),
