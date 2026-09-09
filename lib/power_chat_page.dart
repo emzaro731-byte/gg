@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
-import 'services/chat_power_service.dart';
 
 class PowerChatPage extends StatefulWidget {
   const PowerChatPage({required this.conversationId, required this.title, super.key});
@@ -13,24 +13,23 @@ class PowerChatPage extends StatefulWidget {
 }
 
 class _PowerChatPageState extends State<PowerChatPage> {
-  late final ChatPowerService power;
   String wallpaper = 'default';
   String disappearing = 'off';
   bool chatPinned = false;
   bool chatMuted = false;
 
   SupabaseClient get supabase => Supabase.instance.client;
+  String get _wallpaperKey => 'chat_wallpaper_${widget.conversationId}';
 
   @override
   void initState() {
     super.initState();
-    power = ChatPowerService(widget.conversationId);
     _load();
   }
 
   Future<void> _load() async {
-    wallpaper = await power.wallpaper();
-    disappearing = await power.disappearing();
+    final prefs = await SharedPreferences.getInstance();
+    wallpaper = prefs.getString(_wallpaperKey) ?? 'default';
     try {
       final uid = supabase.auth.currentUser?.id;
       if (uid != null) {
@@ -42,34 +41,90 @@ class _PowerChatPageState extends State<PowerChatPage> {
             .maybeSingle();
         chatPinned = row?['pinned_at'] != null;
         final mutedUntil = row?['muted_until']?.toString();
-        chatMuted = mutedUntil != null && DateTime.tryParse(mutedUntil)?.isAfter(DateTime.now().toUtc()) == true;
+        chatMuted = mutedUntil != null &&
+            DateTime.tryParse(mutedUntil)?.isAfter(DateTime.now().toUtc()) == true;
       }
+      final pref = await supabase
+          .from('conversation_preferences')
+          .select('disappearing_seconds')
+          .eq('conversation_id', widget.conversationId)
+          .eq('user_id', supabase.auth.currentUser!.id)
+          .maybeSingle();
+      final seconds = (pref?['disappearing_seconds'] as num?)?.toInt() ?? 0;
+      disappearing = seconds >= 604800 ? '7d' : seconds >= 86400 ? '24h' : 'off';
     } catch (_) {}
     if (mounted) setState(() {});
   }
 
   Future<void> _wallpaper() async {
-    const choices = {'default': 'Default', 'midnight': 'Midnight', 'blue': 'Ocean blue', 'plain': 'Plain'};
+    const choices = <String, String>{
+      'default': 'Default',
+      'midnight': 'Midnight',
+      'blue': 'Ocean blue',
+      'purple': 'Royal purple',
+      'forest': 'Forest',
+      'plain': 'Plain',
+    };
     final value = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => SimpleDialog(
         title: const Text('Chat wallpaper'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: choices.entries.map((e) => RadioListTile<String>(
-            value: e.key,
-            groupValue: wallpaper,
-            title: Text(e.value),
-            onChanged: (v) => Navigator.pop(context, v),
-          )).toList(),
-        ),
+        children: choices.entries.map((e) => RadioListTile<String>(
+          value: e.key,
+          groupValue: wallpaper,
+          title: Text(e.value),
+          onChanged: (v) => Navigator.pop(context, v),
+        )).toList(),
       ),
     );
     if (value == null) return;
-    await power.setWallpaper(value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_wallpaperKey, value);
     if (mounted) {
       setState(() => wallpaper = value);
-      _toast('Wallpaper updated');
+      _toast('Wallpaper changed to ${choices[value]}');
+    }
+  }
+
+  BoxDecoration _wallpaperDecoration(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    switch (wallpaper) {
+      case 'midnight':
+        return BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.surface, const Color(0xFF101A36), const Color(0xFF050816)],
+          ),
+        );
+      case 'blue':
+        return const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFE7F5FF), Color(0xFFB8E1FF), Color(0xFF82B8E8)],
+          ),
+        );
+      case 'purple':
+        return const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFF1E9FF), Color(0xFFDCC8FF), Color(0xFFB79AE8)],
+          ),
+        );
+      case 'forest':
+        return const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFEAF7EF), Color(0xFFB9DEC8), Color(0xFF7DB08E)],
+          ),
+        );
+      case 'plain':
+        return BoxDecoration(color: scheme.surface);
+      default:
+        return BoxDecoration(color: scheme.scaffoldBackgroundColor);
     }
   }
 
@@ -97,7 +152,6 @@ class _PowerChatPageState extends State<PowerChatPage> {
         'p_conversation_id': widget.conversationId,
         'p_seconds': seconds,
       });
-      await power.setDisappearing(value);
       if (mounted) {
         setState(() => disappearing = value);
         _toast('Disappearing messages updated');
@@ -288,12 +342,21 @@ class _PowerChatPageState extends State<PowerChatPage> {
             ListTile(leading: const Icon(Icons.push_pin_rounded), title: const Text('Pinned messages'), onTap: () { Navigator.pop(context); _pinned(); }),
             ListTile(leading: const Icon(Icons.notifications_off_outlined), title: Text(chatMuted ? 'Unmute notifications' : 'Mute notifications'), subtitle: Text(chatMuted ? 'Muted for 1 hour' : 'Mute for 1 hour'), onTap: () { Navigator.pop(context); _toggleMute(); }),
             ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('Disappearing messages'), subtitle: Text(disappearing == 'off' ? 'Off' : disappearing == '24h' ? '24 hours' : '7 days'), onTap: () { Navigator.pop(context); _disappearing(); }),
-            ListTile(leading: const Icon(Icons.wallpaper_outlined), title: const Text('Chat wallpaper'), subtitle: Text(wallpaper), onTap: () { Navigator.pop(context); _wallpaper(); }),
+            ListTile(leading: const Icon(Icons.wallpaper_outlined), title: const Text('Chat wallpaper'), subtitle: Text(_wallpaperName), onTap: () { Navigator.pop(context); _wallpaper(); }),
           ],
         ),
       ),
     );
   }
+
+  String get _wallpaperName => const {
+    'default': 'Default',
+    'midnight': 'Midnight',
+    'blue': 'Ocean blue',
+    'purple': 'Royal purple',
+    'forest': 'Forest',
+    'plain': 'Plain',
+  }[wallpaper] ?? 'Default';
 
   void _toast(String message) {
     if (!mounted) return;
@@ -302,10 +365,17 @@ class _PowerChatPageState extends State<PowerChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final transparentTheme = Theme.of(context).copyWith(
+      scaffoldBackgroundColor: Colors.transparent,
+    );
     return Stack(
       fit: StackFit.expand,
       children: [
-        ChatPage(conversationId: widget.conversationId, title: widget.title),
+        DecoratedBox(decoration: _wallpaperDecoration(context)),
+        Theme(
+          data: transparentTheme,
+          child: ChatPage(conversationId: widget.conversationId, title: widget.title),
+        ),
         Positioned(
           top: 4,
           right: 145,
