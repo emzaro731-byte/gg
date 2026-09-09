@@ -9,6 +9,8 @@ import 'search_page.dart';
 import 'status_page.dart';
 import 'premium_chats_page.dart';
 import 'email_password_auth_page.dart' as email_auth;
+import 'services/app_settings_service.dart';
+import 'services/notification_service.dart';
 import 'services/presence_service.dart';
 
 Future<void> main() async {
@@ -26,6 +28,7 @@ Future<void> main() async {
       realtimeClientOptions: const RealtimeClientOptions(logLevel: RealtimeLogLevel.error),
       storageOptions: const StorageClientOptions(retryAttempts: 3),
     );
+    await NotificationService.instance.initialize();
     runApp(const GGApp());
   } catch (error, stackTrace) {
     debugPrint('GG Messenger startup failed: $error');
@@ -207,6 +210,8 @@ class _HomePageState extends State<HomePage> {
   int tab = 0;
   late final PresenceService presence;
   Set<String> onlineUsers = <String>{};
+  final AppSettingsService appSettings = AppSettingsService();
+  RealtimeChannel? notificationChannel;
 
   @override
   void initState() {
@@ -214,10 +219,43 @@ class _HomePageState extends State<HomePage> {
     presence = PresenceService(Supabase.instance.client);
     presence.onlineUsers.listen((users) { if (mounted) setState(() => onlineUsers = users); });
     presence.start();
+    _startMessageNotifications();
+  }
+
+  Future<void> _startMessageNotifications() async {
+    await appSettings.load();
+    if (!mounted) return;
+    if (appSettings.notificationsEnabled) {
+      await NotificationService.instance.requestPermission();
+    }
+    notificationChannel = Supabase.instance.client
+        .channel('gg-message-notifications')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          callback: (payload) async {
+            final record = payload.newRecord;
+            final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+            if (currentUserId == null || record['sender_id']?.toString() == currentUserId) return;
+            await NotificationService.instance.showMessage(
+              title: 'GG Messenger',
+              body: record['body']?.toString() ?? 'New message',
+              enabled: appSettings.notificationsEnabled,
+              privateMode: appSettings.privateModeEnabled,
+            );
+          },
+        )
+        .subscribe();
   }
 
   @override
-  void dispose() { presence.dispose(); super.dispose(); }
+  void dispose() {
+    presence.dispose();
+    final channel = notificationChannel;
+    if (channel != null) Supabase.instance.client.removeChannel(channel);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -268,14 +306,55 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final AppSettingsService settings = AppSettingsService();
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await settings.load();
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _setNotifications(bool value) async {
+    await settings.setNotifications(value);
+    if (value) await NotificationService.instance.requestPermission();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setDataSaver(bool value) async {
+    await settings.setDataSaver(value);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setPrivateMode(bool value) async {
+    await settings.setPrivateMode(value);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
     final metadata = user?.userMetadata ?? const <String, dynamic>{};
     final displayName = metadata['display_name']?.toString() ?? 'GG User';
     final username = metadata['username']?.toString();
+    if (loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Settings')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
@@ -297,10 +376,28 @@ class SettingsPage extends StatelessWidget {
           ListTile(leading: const Icon(Icons.email_outlined), title: const Text('Email'), subtitle: Text(user?.email ?? '')),
         ]),
         const SizedBox(height: 12),
-        _SettingsSection(title: 'Messaging', children: const [
-          ListTile(leading: Icon(Icons.lock_outline_rounded), title: Text('Privacy'), subtitle: Text('Authentication and database security are enabled.')),
-          ListTile(leading: Icon(Icons.data_usage_outlined), title: Text('Data saver'), subtitle: Text('Control media and realtime usage.')),
-          ListTile(leading: Icon(Icons.notifications_none_rounded), title: Text('Notifications'), subtitle: Text('Realtime message events are enabled.')),
+        _SettingsSection(title: 'Messaging & Privacy', children: [
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.notifications_active_outlined),
+            title: const Text('Notifications'),
+            subtitle: const Text('Get alerts for new messages'),
+            value: settings.notificationsEnabled,
+            onChanged: _setNotifications,
+          ),
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.data_saver_on_outlined),
+            title: const Text('Data saver'),
+            subtitle: const Text('Reduce media and network usage'),
+            value: settings.dataSaverEnabled,
+            onChanged: _setDataSaver,
+          ),
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.lock_outline_rounded),
+            title: const Text('Private mode'),
+            subtitle: const Text('Hide message text in notifications'),
+            value: settings.privateModeEnabled,
+            onChanged: _setPrivateMode,
+          ),
         ]),
         const SizedBox(height: 12),
         _SettingsSection(title: 'Session', children: [
