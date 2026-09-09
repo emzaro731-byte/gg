@@ -23,18 +23,21 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Remove invalid const constructor invocations
+      - name: Remove the two invalid const constructors
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
-          for filename in ('lib/chat_page.dart', 'lib/gg_ai_page.dart'):
+          files = ('lib/chat_page.dart', 'lib/gg_ai_page.dart')
+          replacements = {
+              'const Padding(': 'Padding(',
+              'const Align(': 'Align(',
+          }
+          for filename in files:
               path = Path(filename)
               text = path.read_text()
-              # Remove const only from constructor invocations. This preserves
-              # const declarations and fixes const_with_non_const safely.
-              text = re.sub(r'\bconst\s+([A-Z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\s*\(', r'\1(', text)
+              for old, new in replacements.items():
+                  text = text.replace(old, new)
               path.write_text(text)
           PY
 
@@ -42,7 +45,7 @@ jobs:
         run: dart fix --apply
 
       - name: Format affected files
-        run: dart format lib/chat_page.dart lib/gg_ai_page.dart lib/status_page.dart lib/gg_image_page.dart
+        run: dart format lib/chat_page.dart lib/status_page.dart lib/gg_ai_page.dart lib/gg_image_page.dart
 
       - name: Verify analyzer
         run: flutter analyze --no-fatal-infos
@@ -55,6 +58,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add lib/chat_page.dart lib/gg_ai_page.dart lib/status_page.dart lib/gg_image_page.dart
-          git commit -m 'fix: resolve Dart const analyzer errors'
+          git add lib/chat_page.dart lib/status_page.dart lib/gg_ai_page.dart lib/gg_image_page.dart
+          git commit -m 'fix: remove invalid const constructors'
           git push
