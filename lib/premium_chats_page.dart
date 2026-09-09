@@ -1,0 +1,217 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'chat_page.dart';
+
+class PremiumChatsPage extends StatefulWidget {
+  const PremiumChatsPage({super.key, this.onlineUsers = const <String>{}});
+  final Set<String> onlineUsers;
+
+  @override
+  State<PremiumChatsPage> createState() => _PremiumChatsPageState();
+}
+
+class _PremiumChatsPageState extends State<PremiumChatsPage> {
+  final searchController = TextEditingController();
+  String filter = 'All';
+  bool showArchived = false;
+
+  SupabaseClient get supabase => Supabase.instance.client;
+  String get userId => supabase.auth.currentUser!.id;
+
+  Stream<List<Map<String, dynamic>>> get _settingsStream => supabase
+      .from('conversation_user_settings')
+      .stream(primaryKey: ['conversation_id', 'user_id'])
+      .eq('user_id', userId);
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _state(String id, {bool? pin, bool? archive, DateTime? muteUntil, bool clearMute = false}) async {
+    try {
+      await supabase.rpc('set_conversation_list_state', params: {
+        'target_conversation_id': id,
+        'pin_state': pin,
+        'archive_state': archive,
+        'mute_until_value': muteUntil?.toUtc().toIso8601String(),
+        'clear_mute': clearMute,
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update chat: $e')));
+    }
+  }
+
+  Future<void> _menu(Map<String, dynamic> chat, Map<String, dynamic>? setting) async {
+    final id = chat['id'].toString();
+    final pinned = setting?['pinned_at'] != null;
+    final archived = setting?['archived_at'] != null;
+    final muted = setting?['muted_until'] != null && DateTime.tryParse(setting!['muted_until'].toString())?.isAfter(DateTime.now().toUtc()) == true;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Wrap(children: [
+          ListTile(leading: Icon(pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined), title: Text(pinned ? 'Unpin chat' : 'Pin chat'), onTap: () { Navigator.pop(context); _state(id, pin: !pinned); }),
+          ListTile(leading: Icon(archived ? Icons.unarchive_rounded : Icons.archive_outlined), title: Text(archived ? 'Unarchive chat' : 'Archive chat'), onTap: () { Navigator.pop(context); _state(id, archive: !archived); }),
+          ListTile(leading: Icon(muted ? Icons.notifications_off_rounded : Icons.notifications_none_rounded), title: Text(muted ? 'Unmute chat' : 'Mute for 1 hour'), onTap: () { Navigator.pop(context); muted ? _state(id, clearMute: true) : _state(id, muteUntil: DateTime.now().add(const Duration(hours: 1))); }),
+          ListTile(leading: const Icon(Icons.mark_chat_read_outlined), title: const Text('Mark as read'), onTap: () { Navigator.pop(context); _markRead(id); }),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _markRead(String id) async {
+    try {
+      final latest = await supabase.from('messages').select('id').eq('conversation_id', id).order('created_at', ascending: false).limit(1).maybeSingle();
+      if (latest == null) return;
+      await supabase.rpc('mark_conversation_read', params: {'target_conversation_id': id, 'target_message_id': latest['id']});
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: supabase.from('conversations').stream(primaryKey: ['id']).order('updated_at', ascending: false),
+      builder: (context, conversationSnapshot) {
+        if (conversationSnapshot.hasError) return Center(child: Text('Unable to load chats: ${conversationSnapshot.error}'));
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _settingsStream,
+          builder: (context, settingsSnapshot) {
+            final settings = <String, Map<String, dynamic>>{};
+            for (final row in settingsSnapshot.data ?? const <Map<String, dynamic>>[]) settings[row['conversation_id'].toString()] = row;
+            final query = searchController.text.trim().toLowerCase();
+            final raw = conversationSnapshot.data ?? const <Map<String, dynamic>>[];
+            final visible = raw.where((chat) {
+              final setting = settings[chat['id'].toString()];
+              final archived = setting?['archived_at'] != null;
+              if (showArchived != archived) return false;
+              if (filter == 'Pinned' && setting?['pinned_at'] == null) return false;
+              if (query.isNotEmpty && !(chat['title']?.toString().toLowerCase().contains(query) ?? false) && !(chat['last_message']?.toString().toLowerCase().contains(query) ?? false)) return false;
+              return true;
+            }).toList();
+            visible.sort((a, b) {
+              final ap = settings[a['id'].toString()]?['pinned_at'] != null;
+              final bp = settings[b['id'].toString()]?['pinned_at'] != null;
+              if (ap != bp) return ap ? -1 : 1;
+              return (b['updated_at']?.toString() ?? '').compareTo(a['updated_at']?.toString() ?? '');
+            });
+
+            return Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                child: TextField(
+                  controller: searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded), hintText: 'Search chats', suffixIcon: query.isEmpty ? null : IconButton(onPressed: () { searchController.clear(); setState(() {}); }, icon: const Icon(Icons.close_rounded))),
+                ),
+              ),
+              SizedBox(
+                height: 42,
+                child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: [
+                  _FilterChip(label: 'All', selected: filter == 'All', onTap: () => setState(() => filter = 'All')),
+                  const SizedBox(width: 8),
+                  _FilterChip(label: 'Pinned', selected: filter == 'Pinned', onTap: () => setState(() => filter = 'Pinned')),
+                  const SizedBox(width: 8),
+                  _FilterChip(label: showArchived ? 'Archived' : 'Archive', selected: showArchived, onTap: () => setState(() => showArchived = !showArchived)),
+                ],),
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: visible.isEmpty
+                  ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(showArchived ? Icons.archive_outlined : Icons.chat_bubble_outline_rounded, size: 48), const SizedBox(height: 12), Text(showArchived ? 'No archived chats' : 'No chats found', style: const TextStyle(fontWeight: FontWeight.w700))]))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) {
+                        final chat = visible[index];
+                        final id = chat['id'].toString();
+                        final title = (chat['title'] ?? 'Conversation').toString();
+                        final initial = title.isEmpty ? '?' : title.substring(0, 1).toUpperCase();
+                        final participant = chat['other_user_id']?.toString();
+                        final online = participant != null && widget.onlineUsers.contains(participant);
+                        final setting = settings[id];
+                        final pinned = setting?['pinned_at'] != null;
+                        final muted = setting?['muted_until'] != null && DateTime.tryParse(setting!['muted_until'].toString())?.isAfter(DateTime.now().toUtc()) == true;
+                        return Dismissible(
+                          key: ValueKey(id),
+                          background: _swipeBackground(Icons.archive_rounded, 'Archive', Alignment.centerLeft),
+                          secondaryBackground: _swipeBackground(Icons.push_pin_rounded, 'Pin', Alignment.centerRight),
+                          confirmDismiss: (direction) async {
+                            if (direction == DismissDirection.startToEnd) { await _state(id, archive: true); return false; }
+                            await _state(id, pin: !pinned); return false;
+                          },
+                          child: _GlassChatTile(
+                            title: title,
+                            initial: initial,
+                            lastMessage: (chat['last_message'] ?? 'Tap to open').toString(),
+                            online: online,
+                            pinned: pinned,
+                            muted: muted,
+                            onMenu: () => _menu(chat, setting),
+                            onTap: () async {
+                              await Navigator.push(context, MaterialPageRoute(builder: (_) => ChatPage(conversationId: id, title: title)));
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                        );
+                      },
+                    )),
+            ]);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _swipeBackground(IconData icon, String label, Alignment alignment) => Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(22)),
+        alignment: alignment,
+        child: Row(mainAxisAlignment: alignment == Alignment.centerLeft ? MainAxisAlignment.start : MainAxisAlignment.end, children: [Icon(icon), const SizedBox(width: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.w700))]),
+      );
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => ChoiceChip(label: Text(label), selected: selected, onSelected: (_) => onTap());
+}
+
+class _GlassChatTile extends StatelessWidget {
+  const _GlassChatTile({required this.title, required this.initial, required this.lastMessage, required this.online, required this.pinned, required this.muted, required this.onMenu, required this.onTap});
+  final String title, initial, lastMessage;
+  final bool online, pinned, muted;
+  final VoidCallback onMenu, onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.surface.withOpacity(.58),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(.25)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.04), blurRadius: 18, offset: const Offset(0, 5))],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        leading: Stack(children: [
+          CircleAvatar(radius: 27, child: Text(initial, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18))),
+          if (online) Positioned(right: 0, bottom: 0, child: Container(width: 14, height: 14, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: scheme.surface, width: 2)))),
+        ]),
+        title: Row(children: [Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))), if (pinned) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.push_pin_rounded, size: 16)), if (muted) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.notifications_off_rounded, size: 16))]),
+        subtitle: Padding(padding: const EdgeInsets.only(top: 3), child: Text(lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis)),
+        trailing: IconButton(onPressed: onMenu, icon: const Icon(Icons.more_horiz_rounded)),
+        onTap: onTap,
+      ),
+    );
+  }
+}
