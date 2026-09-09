@@ -14,7 +14,7 @@ class _GgAiPageState extends State<GgAiPage> {
   final controller = TextEditingController();
   final scrollController = ScrollController();
   final messages = <Map<String, String>>[];
-  const modes = ['Chat', 'Code', 'Debug', 'Explain'];
+  static const modes = ['Chat', 'Code', 'Debug', 'Explain'];
   String mode = 'Chat';
   bool sending = false;
 
