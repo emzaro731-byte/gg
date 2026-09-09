@@ -22,6 +22,39 @@ jobs:
       - name: Generate Android project
         run: flutter create --platforms=android --project-name gg_messenger .
 
+      - name: Install Firebase Android configuration
+        shell: bash
+        env:
+          FIREBASE_ANDROID_JSON: ${{ secrets.FIREBASE_ANDROID_JSON }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_JSON" ]; then
+            printf '%s' "$FIREBASE_ANDROID_JSON" > android/app/google-services.json
+            echo "Firebase Android configuration installed."
+          else
+            echo "FIREBASE_ANDROID_JSON is not configured; building without FCM configuration."
+          fi
+
+      - name: Configure Google Services Gradle plugin
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          settings = Path('android/settings.gradle.kts')
+          s = settings.read_text()
+          plugin = 'id("com.google.gms.google-services") version "4.5.0" apply false'
+          if plugin not in s:
+              marker = 'plugins {'
+              s = s.replace(marker, marker + '\n    ' + plugin, 1)
+              settings.write_text(s)
+
+          app = Path('android/app/build.gradle.kts')
+          s = app.read_text()
+          if 'id("com.google.gms.google-services")' not in s:
+              marker = 'plugins {'
+              s = s.replace(marker, marker + '\n    id("com.google.gms.google-services")', 1)
+              app.write_text(s)
+          PY
+
       - name: Configure Android permissions
         shell: bash
         run: |
@@ -30,7 +63,7 @@ jobs:
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
           marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-          permissions = '''\n    <uses-feature android:name="android.hardware.camera" />\n    <uses-feature android:name="android.hardware.camera.autofocus" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n'''
+          permissions = '''\n    <uses-feature android:name="android.hardware.camera" />\n    <uses-feature android:name="android.hardware.camera.autofocus" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n'''
           if 'android.permission.CAMERA' not in s:
               s = s.replace(marker, marker + permissions)
           p.write_text(s)
