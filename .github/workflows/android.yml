@@ -6,7 +6,7 @@ on:
     branches: [android-app]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -30,14 +30,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           candidates = [Path('android/app/build.gradle.kts'), Path('android/app/build.gradle')]
           p = next((x for x in candidates if x.exists()), None)
           if p is None:
               raise SystemExit('No Android app Gradle file was generated')
-
           s = p.read_text()
-
           if p.suffix == '.kts':
               if 'isCoreLibraryDesugaringEnabled = true' not in s:
                   marker = 'compileOptions {'
@@ -54,20 +51,14 @@ jobs:
                   else:
                       s = s.replace('android {', 'android {\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n    }', 1)
               dep = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
-
           if 'desugar_jdk_libs' not in s:
               if 'dependencies {' in s:
                   s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1)
               else:
                   s += '\n\ndependencies {\n    ' + dep + '\n}\n'
-
           p.write_text(s)
           print(f'Updated {p} for core library desugaring')
           PY
-
-          echo '--- Android Gradle configuration ---'
-          find android/app -maxdepth 1 -type f -name 'build.gradle*' -print
-          grep -R -n -A4 -B2 'desugar\|CoreLibraryDesugaring\|coreLibraryDesugaringEnabled' android/app/build.gradle* || true
 
       - name: Configure Android permissions
         shell: bash
@@ -98,6 +89,9 @@ jobs:
         run: |
           cp lib/chat_page.dart lib/realtime_chat_page.dart
           cp lib/offline_first_chat_page.dart lib/chat_page.dart
+
+      - name: Repair generated Dart syntax
+        run: python3 tool/repair_dart_syntax.py
 
       - name: Format Dart sources
         run: dart format lib
