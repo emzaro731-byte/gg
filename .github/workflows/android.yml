@@ -92,6 +92,9 @@ jobs:
           cp lib/chat_page.dart lib/realtime_chat_page.dart
           cp lib/offline_first_chat_page.dart lib/chat_page.dart
 
+      - name: Apply shared chat wallpaper
+        run: python3 tool/upgrade_shared_wallpaper.py
+
       - name: Repair generated Dart syntax
         run: python3 tool/repair_dart_syntax.py
 
