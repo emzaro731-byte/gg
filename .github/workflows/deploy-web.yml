@@ -40,6 +40,10 @@ jobs:
       - name: Build Flutter web release
         run: flutter build web --release --base-href "/gg/"
 
+      - name: Cache-bust Flutter bootstrap
+        run: |
+          sed -i "s/flutter_bootstrap.js/flutter_bootstrap.js?v=${GITHUB_RUN_ID}/g" build/web/index.html
+
       - name: Add SPA fallback and disable Jekyll
         run: |
           cp build/web/index.html build/web/404.html
