@@ -16,6 +16,8 @@ class _PowerChatPageState extends State<PowerChatPage> {
   late final ChatPowerService power;
   String wallpaper = 'default';
   String disappearing = 'off';
+  bool chatPinned = false;
+  bool chatMuted = false;
 
   SupabaseClient get supabase => Supabase.instance.client;
 
@@ -29,6 +31,20 @@ class _PowerChatPageState extends State<PowerChatPage> {
   Future<void> _load() async {
     wallpaper = await power.wallpaper();
     disappearing = await power.disappearing();
+    try {
+      final uid = supabase.auth.currentUser?.id;
+      if (uid != null) {
+        final row = await supabase
+            .from('conversation_user_settings')
+            .select('pinned_at,muted_until')
+            .eq('conversation_id', widget.conversationId)
+            .eq('user_id', uid)
+            .maybeSingle();
+        chatPinned = row?['pinned_at'] != null;
+        final mutedUntil = row?['muted_until']?.toString();
+        chatMuted = mutedUntil != null && DateTime.tryParse(mutedUntil)?.isAfter(DateTime.now().toUtc()) == true;
+      }
+    } catch (_) {}
     if (mounted) setState(() {});
   }
 
@@ -38,12 +54,23 @@ class _PowerChatPageState extends State<PowerChatPage> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Chat wallpaper'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: choices.entries.map((e) => RadioListTile<String>(value: e.key, groupValue: wallpaper, title: Text(e.value), onChanged: (v) => Navigator.pop(context, v))).toList()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: choices.entries.map((e) => RadioListTile<String>(
+            value: e.key,
+            groupValue: wallpaper,
+            title: Text(e.value),
+            onChanged: (v) => Navigator.pop(context, v),
+          )).toList(),
+        ),
       ),
     );
     if (value == null) return;
     await power.setWallpaper(value);
-    if (mounted) setState(() => wallpaper = value);
+    if (mounted) {
+      setState(() => wallpaper = value);
+      _toast('Wallpaper updated');
+    }
   }
 
   Future<void> _disappearing() async {
@@ -52,23 +79,40 @@ class _PowerChatPageState extends State<PowerChatPage> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Disappearing messages'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: choices.entries.map((e) => RadioListTile<String>(value: e.key, groupValue: disappearing, title: Text(e.value), onChanged: (v) => Navigator.pop(context, v))).toList()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: choices.entries.map((e) => RadioListTile<String>(
+            value: e.key,
+            groupValue: disappearing,
+            title: Text(e.value),
+            onChanged: (v) => Navigator.pop(context, v),
+          )).toList(),
+        ),
       ),
     );
     if (value == null) return;
     final seconds = value == '24h' ? 86400 : value == '7d' ? 604800 : 0;
     try {
-      await supabase.rpc('set_disappearing_messages', params: {'p_conversation_id': widget.conversationId, 'p_seconds': seconds});
+      await supabase.rpc('set_disappearing_messages', params: {
+        'p_conversation_id': widget.conversationId,
+        'p_seconds': seconds,
+      });
       await power.setDisappearing(value);
-      if (mounted) setState(() => disappearing = value);
+      if (mounted) {
+        setState(() => disappearing = value);
+        _toast('Disappearing messages updated');
+      }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update disappearing messages.')));
+      _toast('Could not update disappearing messages.');
     }
   }
 
   Future<void> _pinned() async {
     try {
-      final rows = await supabase.from('message_pins').select('message_id,pinned_at,messages(body,conversation_id)').order('pinned_at', ascending: false);
+      final rows = await supabase
+          .from('message_pins')
+          .select('message_id,pinned_at,messages(body,conversation_id)')
+          .order('pinned_at', ascending: false);
       final filtered = (rows as List).where((r) {
         final m = r['messages'];
         return m is Map && m['conversation_id']?.toString() == widget.conversationId;
@@ -79,20 +123,151 @@ class _PowerChatPageState extends State<PowerChatPage> {
         showDragHandle: true,
         builder: (_) => SafeArea(
           child: filtered.isEmpty
-              ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No pinned messages yet.')))
+              ? const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: Text('No pinned messages yet.')),
+                )
               : ListView.builder(
                   shrinkWrap: true,
                   itemCount: filtered.length,
                   itemBuilder: (_, i) {
                     final m = filtered[i];
                     final message = m['messages'];
-                    return ListTile(leading: const Icon(Icons.push_pin_rounded), title: Text(message is Map ? message['body']?.toString() ?? 'Message' : 'Message'), subtitle: Text(m['pinned_at']?.toString() ?? ''));
+                    return ListTile(
+                      leading: const Icon(Icons.push_pin_rounded),
+                      title: Text(message is Map ? message['body']?.toString() ?? 'Message' : 'Message'),
+                      subtitle: Text(m['pinned_at']?.toString() ?? ''),
+                    );
                   },
                 ),
         ),
       );
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pinned messages are unavailable right now.')));
+      _toast('Pinned messages are unavailable right now.');
+    }
+  }
+
+  Future<void> _togglePinChat() async {
+    try {
+      await supabase.rpc('set_conversation_list_state', params: {
+        'target_conversation_id': widget.conversationId,
+        'pin_state': !chatPinned,
+      });
+      if (mounted) {
+        setState(() => chatPinned = !chatPinned);
+        _toast(chatPinned ? 'Chat pinned' : 'Chat unpinned');
+      }
+    } catch (_) {
+      _toast('Could not change chat pin.');
+    }
+  }
+
+  Future<void> _toggleMute() async {
+    try {
+      await supabase.rpc('set_conversation_list_state', params: {
+        'target_conversation_id': widget.conversationId,
+        'mute_until_value': chatMuted ? null : DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
+        'clear_mute': chatMuted,
+      });
+      if (mounted) {
+        setState(() => chatMuted = !chatMuted);
+        _toast(chatMuted ? 'Notifications muted for 1 hour' : 'Notifications unmuted');
+      }
+    } catch (_) {
+      _toast('Could not change notification settings.');
+    }
+  }
+
+  Future<void> _searchMessages() async {
+    final query = await showDialog<String>(
+      context: context,
+      builder: (_) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Search messages'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Search this chat'),
+            onSubmitted: (value) => Navigator.pop(context, value.trim()),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Search')),
+          ],
+        );
+      },
+    );
+    if (query == null || query.isEmpty) return;
+    try {
+      final rows = await supabase
+          .from('messages')
+          .select('id,body,created_at,sender_id')
+          .eq('conversation_id', widget.conversationId)
+          .ilike('body', '%$query%')
+          .order('created_at', ascending: false)
+          .limit(50);
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (_) => SafeArea(
+          child: rows.isEmpty
+              ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No messages found.')))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: rows.length,
+                  itemBuilder: (_, i) => ListTile(
+                    leading: const Icon(Icons.message_outlined),
+                    title: Text(rows[i]['body']?.toString() ?? ''),
+                    subtitle: Text(rows[i]['created_at']?.toString() ?? ''),
+                  ),
+                ),
+        ),
+      );
+    } catch (_) {
+      _toast('Search is unavailable right now.');
+    }
+  }
+
+  Future<void> _mediaAndFiles() async {
+    try {
+      final rows = await supabase
+          .from('messages')
+          .select('body,message_type,media_url,file_name,file_size,created_at')
+          .eq('conversation_id', widget.conversationId)
+          .neq('media_url', null)
+          .order('created_at', ascending: false)
+          .limit(100);
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (_) => SafeArea(
+          child: rows.isEmpty
+              ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No media or files in this chat.')))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: rows.length,
+                  itemBuilder: (_, i) => ListTile(
+                    leading: Icon(_iconForType(rows[i]['message_type']?.toString())),
+                    title: Text(rows[i]['file_name']?.toString() ?? rows[i]['body']?.toString() ?? 'Media'),
+                    subtitle: Text(rows[i]['created_at']?.toString() ?? ''),
+                  ),
+                ),
+        ),
+      );
+    } catch (_) {
+      _toast('Media and files are unavailable right now.');
+    }
+  }
+
+  IconData _iconForType(String? type) {
+    switch (type) {
+      case 'image': return Icons.image_outlined;
+      case 'video': return Icons.videocam_outlined;
+      case 'audio': return Icons.audiotrack_outlined;
+      default: return Icons.insert_drive_file_outlined;
     }
   }
 
@@ -101,14 +276,28 @@ class _PowerChatPageState extends State<PowerChatPage> {
       context: context,
       showDragHandle: true,
       builder: (_) => SafeArea(
-        child: Wrap(children: [
-          const Padding(padding: EdgeInsets.fromLTRB(20, 4, 20, 10), child: Text('Chat options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-          ListTile(leading: const Icon(Icons.push_pin_outlined), title: const Text('Pinned messages'), onTap: () { Navigator.pop(context); _pinned(); }),
-          ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('Disappearing messages'), subtitle: Text(disappearing == 'off' ? 'Off' : disappearing == '24h' ? '24 hours' : '7 days'), onTap: () { Navigator.pop(context); _disappearing(); }),
-          ListTile(leading: const Icon(Icons.wallpaper_outlined), title: const Text('Chat wallpaper'), subtitle: Text(wallpaper), onTap: () { Navigator.pop(context); _wallpaper(); }),
-        ]),
+        child: Wrap(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 10),
+              child: Text('Chat options', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            ),
+            ListTile(leading: const Icon(Icons.search_rounded), title: const Text('Search messages'), onTap: () { Navigator.pop(context); _searchMessages(); }),
+            ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Media, links & files'), onTap: () { Navigator.pop(context); _mediaAndFiles(); }),
+            ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(chatPinned ? 'Unpin chat' : 'Pin chat'), onTap: () { Navigator.pop(context); _togglePinChat(); }),
+            ListTile(leading: const Icon(Icons.push_pin_rounded), title: const Text('Pinned messages'), onTap: () { Navigator.pop(context); _pinned(); }),
+            ListTile(leading: const Icon(Icons.notifications_off_outlined), title: Text(chatMuted ? 'Unmute notifications' : 'Mute notifications'), subtitle: Text(chatMuted ? 'Muted for 1 hour' : 'Mute for 1 hour'), onTap: () { Navigator.pop(context); _toggleMute(); }),
+            ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('Disappearing messages'), subtitle: Text(disappearing == 'off' ? 'Off' : disappearing == '24h' ? '24 hours' : '7 days'), onTap: () { Navigator.pop(context); _disappearing(); }),
+            ListTile(leading: const Icon(Icons.wallpaper_outlined), title: const Text('Chat wallpaper'), subtitle: Text(wallpaper), onTap: () { Navigator.pop(context); _wallpaper(); }),
+          ],
+        ),
       ),
     );
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -123,7 +312,11 @@ class _PowerChatPageState extends State<PowerChatPage> {
           child: Material(
             color: Theme.of(context).colorScheme.surface.withValues(alpha: .88),
             shape: const CircleBorder(),
-            child: IconButton(tooltip: 'Chat options', onPressed: _menu, icon: const Icon(Icons.more_vert_rounded)),
+            child: IconButton(
+              tooltip: 'Chat options',
+              onPressed: _menu,
+              icon: const Icon(Icons.more_vert_rounded),
+            ),
           ),
         ),
       ],
