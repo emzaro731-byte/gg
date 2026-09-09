@@ -38,6 +38,9 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Verify GG logo asset
+        run: test -s assets/branding/gg_logo.svg
+
       - name: Format Dart sources
         run: dart format lib
 
@@ -46,6 +49,9 @@ jobs:
 
       - name: Build release APK directly
         run: flutter build apk --release
+
+      - name: Verify release APK
+        run: test -s build/app/outputs/flutter-apk/app-release.apk
 
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk GG-Messenger-release.apk
