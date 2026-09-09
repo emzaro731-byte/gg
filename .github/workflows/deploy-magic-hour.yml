@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+# Project ref is public project metadata, not a secret.
+env:
+  SUPABASE_PROJECT_REF: vihbsfrwnslnmheowkhy
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -21,16 +25,23 @@ jobs:
       - name: Configure image AI secrets
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           MAGIC_HOUR_API_KEY: ${{ secrets.MAGIC_HOUR_API_KEY }}
           MY_AI_API_URL: ${{ secrets.MY_AI_API_URL }}
           MY_AI_API_KEY: ${{ secrets.MY_AI_API_KEY }}
         run: |
-          test -n "$SUPABASE_ACCESS_TOKEN"
-          test -n "$SUPABASE_PROJECT_REF"
-          test -n "$MAGIC_HOUR_API_KEY"
-          test -n "$MY_AI_API_URL"
-          test -n "$MY_AI_API_KEY"
+          set -euo pipefail
+          missing=0
+          for name in SUPABASE_ACCESS_TOKEN MAGIC_HOUR_API_KEY MY_AI_API_URL MY_AI_API_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "ERROR: GitHub Actions secret $name is missing."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Open repository Settings > Secrets and variables > Actions and add the missing secrets."
+            exit 1
+          fi
+
           supabase secrets set \
             MAGIC_HOUR_API_KEY="$MAGIC_HOUR_API_KEY" \
             MY_AI_API_URL="$MY_AI_API_URL" \
@@ -40,6 +51,6 @@ jobs:
       - name: Deploy image function
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
+          set -euo pipefail
           supabase functions deploy gg-image-generate --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
