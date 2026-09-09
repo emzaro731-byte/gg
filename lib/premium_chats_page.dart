@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'chat_page.dart';
+import 'new_chat_page.dart';
 
 class PremiumChatsPage extends StatefulWidget {
   const PremiumChatsPage({super.key, this.onlineUsers = const <String>{}});
@@ -15,6 +17,9 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
   final searchController = TextEditingController();
   String filter = 'All';
   bool showArchived = false;
+  bool searchingUsers = false;
+  List<Map<String, dynamic>> usernameResults = [];
+  Timer? _searchDebounce;
 
   SupabaseClient get supabase => Supabase.instance.client;
   String get userId => supabase.auth.currentUser!.id;
@@ -26,8 +31,50 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    final q = value.trim().replaceFirst(RegExp(r'^@'), '').toLowerCase();
+    if (q.length < 2) {
+      setState(() => usernameResults = []);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () => _searchUsers(q));
+  }
+
+  Future<void> _searchUsers(String query) async {
+    if (!mounted) return;
+    setState(() => searchingUsers = true);
+    try {
+      final rows = await supabase.rpc('search_users_by_username', params: {
+        'search_username': query,
+        'result_limit': 20,
+      });
+      if (!mounted) return;
+      setState(() => usernameResults = List<Map<String, dynamic>>.from(rows as List));
+    } on PostgrestException catch (_) {
+      // Fallback for projects where the RPC has not been applied yet.
+      try {
+        final rows = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url, bio, last_seen')
+            .neq('id', userId)
+            .ilike('username', '%$query%')
+            .limit(20);
+        if (mounted) setState(() => usernameResults = List<Map<String, dynamic>>.from(rows));
+      } catch (_) {
+        if (mounted) setState(() => usernameResults = []);
+      }
+    } catch (_) {
+      if (mounted) setState(() => usernameResults = []);
+    } finally {
+      if (mounted) setState(() => searchingUsers = false);
+    }
   }
 
   Future<void> _state(String id, {bool? pin, bool? archive, DateTime? muteUntil, bool clearMute = false}) async {
@@ -41,6 +88,16 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
       });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update chat: $e')));
+    }
+  }
+
+  Future<void> _openUser(Map<String, dynamic> user) async {
+    final id = user['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => NewChatPage(initialUserId: id)));
+    if (mounted) {
+      searchController.clear();
+      setState(() => usernameResults = []);
     }
   }
 
@@ -73,7 +130,6 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: supabase.from('conversations').stream(primaryKey: ['id']).order('updated_at', ascending: false),
       builder: (context, conversationSnapshot) {
@@ -105,10 +161,16 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
                 child: TextField(
                   controller: searchController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded), hintText: 'Search chats', suffixIcon: query.isEmpty ? null : IconButton(onPressed: () { searchController.clear(); setState(() {}); }, icon: const Icon(Icons.close_rounded))),
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.alternate_email_rounded),
+                    hintText: 'Search friends by @username',
+                    suffixIcon: query.isEmpty ? null : IconButton(onPressed: () { searchController.clear(); _onSearchChanged(''); }, icon: const Icon(Icons.close_rounded)),
+                  ),
                 ),
               ),
+              if (query.length >= 2 && (searchingUsers || usernameResults.isNotEmpty))
+                _usernameSearchPanel(query),
               SizedBox(
                 height: 42,
                 child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: [
@@ -163,6 +225,36 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
           },
         );
       },
+    );
+  }
+
+  Widget _usernameSearchPanel(String query) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(.35)),
+      ),
+      child: searchingUsers
+          ? const Padding(padding: EdgeInsets.all(18), child: Row(children: [SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Finding usernames…')]))
+          : usernameResults.isEmpty
+              ? const Padding(padding: EdgeInsets.all(18), child: Text('No user found with that username.'))
+              : Column(children: [
+                  const Padding(padding: EdgeInsets.fromLTRB(16, 14, 16, 4), child: Align(alignment: Alignment.centerLeft, child: Text('People', style: TextStyle(fontWeight: FontWeight.w800)))),
+                  ...usernameResults.take(8).map((user) {
+                    final name = (user['display_name'] ?? user['username'] ?? 'GG User').toString();
+                    final username = (user['username'] ?? '').toString();
+                    final avatar = (user['avatar_url'] ?? '').toString();
+                    return ListTile(
+                      leading: avatar.isNotEmpty ? CircleAvatar(backgroundImage: NetworkImage(avatar)) : CircleAvatar(child: Text(name.isEmpty ? '?' : name[0].toUpperCase())),
+                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(username.isEmpty ? 'GG Messenger user' : '@$username'),
+                      trailing: const Icon(Icons.chat_rounded),
+                      onTap: () => _openUser(user),
+                    );
+                  }),
+                ]),
     );
   }
 
