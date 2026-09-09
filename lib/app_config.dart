@@ -1,14 +1,15 @@
-/// Runtime configuration for GG Messenger.
+/// Supabase configuration for GG Messenger.
 ///
-/// Values are injected with --dart-define / GitHub Actions secrets so backend
-/// configuration is not hard-coded into the application source.
+/// The publishable/anon key is intended for use in a client application.
+/// Never place a Supabase secret/service-role key here.
 class AppConfig {
   const AppConfig._();
 
-  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  static const supabasePublishableKey =
-      String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+  static const supabaseUrl =
+      'https://vihbsfrwnslnmheowkhy.supabase.co';
 
-  static bool get isConfigured =>
-      supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
+  static const supabasePublishableKey =
+      'sb_publishable_j8gV4-PeFte1RMgl759uQQ_KrM_3vzK';
+
+  static const isConfigured = true;
 }
