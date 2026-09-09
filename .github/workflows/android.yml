@@ -62,6 +62,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Auto-fix Dart analyzer issues
+        run: dart fix --apply
+
       - name: Analyze
         run: flutter analyze
 
