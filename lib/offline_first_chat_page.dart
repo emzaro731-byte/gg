@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'chat_page.dart' as realtime;
+import 'services/call_service.dart';
 import 'services/offline_sync_service.dart';
 
 /// Drop-in ChatPage that uses the existing realtime chat whenever Supabase is
@@ -102,6 +103,9 @@ class _CachedChatState extends State<_CachedChat> {
   List<Map<String, dynamic>> messages = [];
   bool sending = false;
 
+  SupabaseClient get supabase => Supabase.instance.client;
+  String? get userId => supabase.auth.currentUser?.id;
+
   @override
   void initState() {
     super.initState();
@@ -118,10 +122,39 @@ class _CachedChatState extends State<_CachedChat> {
     });
   }
 
+  Future<String?> _otherMemberId() async {
+    final me = userId;
+    if (me == null) return null;
+    try {
+      final rows = await supabase
+          .from('conversation_members')
+          .select('user_id')
+          .eq('conversation_id', widget.conversationId)
+          .neq('user_id', me)
+          .limit(1);
+      return rows.isEmpty ? null : rows.first['user_id']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _startCall(bool video) async {
+    // Calls require a live Supabase connection. Keep the controls visible,
+    // just explain why they are unavailable while this cached screen is open.
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(video
+            ? 'Video calls are available when you are back online.'
+            : 'Voice calls are available when you are back online.'),
+      ),
+    );
+  }
+
   Future<void> _send() async {
     final text = controller.text.trim();
     if (text.isEmpty || sending) return;
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = supabase.auth.currentUser;
     if (user == null) return;
     setState(() => sending = true);
 
@@ -161,8 +194,10 @@ class _CachedChatState extends State<_CachedChat> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 0,
         title: Row(
           children: [
             CircleAvatar(child: Text(widget.title.isEmpty ? '?' : widget.title[0].toUpperCase())),
@@ -178,13 +213,25 @@ class _CachedChatState extends State<_CachedChat> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Voice call',
+            onPressed: () => _startCall(false),
+            icon: const Icon(Icons.call_rounded),
+          ),
+          IconButton(
+            tooltip: 'Video call',
+            onPressed: () => _startCall(true),
+            icon: const Icon(Icons.videocam_rounded),
+          ),
+        ],
       ),
       body: Column(
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: scheme.surfaceContainerHighest,
             child: const Text(
               'You are offline. Messages are saved here and will send automatically when internet returns.',
               textAlign: TextAlign.center,
@@ -199,7 +246,7 @@ class _CachedChatState extends State<_CachedChat> {
                     itemCount: messages.length,
                     itemBuilder: (_, index) {
                       final m = messages[index];
-                      final mine = m['sender_id'] == Supabase.instance.client.auth.currentUser?.id;
+                      final mine = m['sender_id'] == userId;
                       final queued = m['_offline'] == true;
                       return Align(
                         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -208,9 +255,7 @@ class _CachedChatState extends State<_CachedChat> {
                           margin: const EdgeInsets.only(bottom: 7),
                           padding: const EdgeInsets.fromLTRB(14, 10, 12, 7),
                           decoration: BoxDecoration(
-                            color: mine
-                                ? Theme.of(context).colorScheme.primaryContainer
-                                : Theme.of(context).colorScheme.surfaceContainerHighest,
+                            color: mine ? scheme.primaryContainer : scheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: Column(
