@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'new_chat_page.dart';
+import 'services/presence_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -245,17 +246,50 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int tab = 0;
+  late final PresenceService presence;
+  Set<String> onlineUsers = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    presence = PresenceService(Supabase.instance.client);
+    presence.onlineUsers.listen((users) {
+      if (mounted) setState(() => onlineUsers = users);
+    });
+    presence.start();
+  }
+
+  @override
+  void dispose() {
+    presence.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const ChatsPage(),
+      ChatsPage(onlineUsers: onlineUsers),
       const PlaceholderPage(title: 'Updates', icon: Icons.circle_outlined),
       const PlaceholderPage(title: 'Calls', icon: Icons.call_outlined),
     ];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GG', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('GG', style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(width: 8),
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.green.withOpacity(.35), blurRadius: 6)],
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Search',
@@ -300,7 +334,8 @@ class _HomePageState extends State<HomePage> {
 }
 
 class ChatsPage extends StatelessWidget {
-  const ChatsPage({super.key});
+  final Set<String> onlineUsers;
+  const ChatsPage({super.key, this.onlineUsers = const <String>{}});
   @override
   Widget build(BuildContext context) => StreamBuilder<List<Map<String, dynamic>>>(
         stream: Supabase.instance.client.from('conversations').stream(primaryKey: ['id']).order('updated_at', ascending: false),
@@ -316,9 +351,30 @@ class ChatsPage extends StatelessWidget {
               final chat = chats[i];
               final title = (chat['title'] ?? 'Conversation').toString();
               final initial = title.isEmpty ? '?' : title.substring(0, 1).toUpperCase();
+              final participantId = chat['other_user_id']?.toString();
+              final isOnline = participantId != null && onlineUsers.contains(participantId);
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: CircleAvatar(radius: 26, child: Text(initial, style: const TextStyle(fontWeight: FontWeight.bold))),
+                leading: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CircleAvatar(radius: 26, child: Text(initial, style: const TextStyle(fontWeight: FontWeight.bold))),
+                    if (isOnline)
+                      Positioned(
+                        right: -1,
+                        bottom: 0,
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text((chat['last_message'] ?? 'Tap to open').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: const Icon(Icons.chevron_right),
