@@ -3,7 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 
 class NewChatPage extends StatefulWidget {
-  const NewChatPage({super.key});
+  const NewChatPage({super.key, this.initialUserId});
+  final String? initialUserId;
   @override State<NewChatPage> createState() => _NewChatPageState();
 }
 
@@ -13,6 +14,27 @@ class _NewChatPageState extends State<NewChatPage> {
   List<Map<String, dynamic>> users = [];
   SupabaseClient get supabase => Supabase.instance.client;
   String get me => supabase.auth.currentUser!.id;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.initialUserId;
+    if (id != null && id.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => openInitialUser(id));
+    }
+  }
+
+  Future<void> openInitialUser(String id) async {
+    setState(() => loading = true);
+    try {
+      final row = await supabase.from('profiles').select('id, username, display_name, avatar_url').eq('id', id).maybeSingle();
+      if (row != null && mounted) await startChat(Map<String, dynamic>.from(row));
+    } on PostgrestException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
 
   Future<void> findUsers(String value) async {
     final q = value.trim();
