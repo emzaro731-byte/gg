@@ -1,4 +1,4 @@
-name: Build GG Messenger Android
+name: Build GG Messenger Offline Android
 
 on:
   workflow_dispatch:
@@ -30,113 +30,35 @@ jobs:
           rm -f test/widget_test.dart
           rm -f analysis_options.yaml
 
-      - name: Configure Android permissions and notification desugaring
+      - name: Configure offline Android permissions
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           manifest = Path('android/app/src/main/AndroidManifest.xml')
           s = manifest.read_text()
           marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
           permissions = '''\
-              <uses-permission android:name="android.permission.INTERNET" />
               <uses-feature android:name="android.hardware.camera" />
               <uses-feature android:name="android.hardware.camera.autofocus" />
               <uses-permission android:name="android.permission.CAMERA" />
               <uses-permission android:name="android.permission.RECORD_AUDIO" />
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-              <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
-              <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.VIBRATE" />
-              <uses-permission android:name="android.permission.WAKE_LOCK" />
-              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
           '''
           if 'android.permission.CAMERA' not in s:
               s = s.replace(marker, marker + permissions)
           manifest.write_text(s)
-
-          candidates = [Path('android/app/build.gradle.kts'), Path('android/app/build.gradle')]
-          gradle = next((p for p in candidates if p.exists()), None)
-          if gradle is None:
-              raise SystemExit('Android app Gradle file not found')
-
-          s = gradle.read_text()
-          is_kts = gradle.suffix == '.kts'
-
-          if is_kts:
-              if 'isCoreLibraryDesugaringEnabled = true' not in s:
-                  block = '''\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }\n'''
-                  s = s.replace('android {', 'android {' + block, 1)
-              if 'multiDexEnabled = true' not in s:
-                  s = s.replace('defaultConfig {', 'defaultConfig {\n        multiDexEnabled = true', 1)
-              if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in s:
-                  if 'dependencies {' in s:
-                      s = s.replace('dependencies {', 'dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")', 1)
-                  else:
-                      s += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
-          else:
-              if 'coreLibraryDesugaringEnabled true' not in s:
-                  block = '''\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n'''
-                  s = s.replace('android {', 'android {' + block, 1)
-              if 'multiDexEnabled true' not in s:
-                  s = s.replace('defaultConfig {', 'defaultConfig {\n        multiDexEnabled true', 1)
-              if "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'" not in s:
-                  if 'dependencies {' in s:
-                      s = s.replace('dependencies {', "dependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'", 1)
-                  else:
-                      s += "\n\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n}\n"
-
-          gradle.write_text(s)
-          print(f'Configured notification desugaring in {gradle}')
-          PY
-
-      - name: Upgrade premium interface
-        run: python3 tool/upgrade_interface.py
-
-      - name: Modernize Flutter color APIs
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          files = ['lib/chat_page.dart', 'lib/group_manage_page.dart', 'lib/premium_chats_page.dart', 'lib/status_page.dart']
-          for name in files:
-              p = Path(name)
-              s = p.read_text()
-              s = s.replace('.withOpacity(', '.withValues(alpha: ')
-              p.write_text(s)
-          p = Path('lib/status_page.dart')
-          s = p.read_text()
-          s = s.replace("    final scheme = Theme.of(context).colorScheme;\n    return Scaffold(\n      body:", "    return Scaffold(\n      body:")
-          p.write_text(s)
-          PY
-
-      - name: Remove non-constant Padding/Align invocations
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          for name in ('lib/chat_page.dart', 'lib/gg_ai_page.dart'):
-              p = Path(name)
-              s = p.read_text()
-              s = s.replace('const Padding(', 'Padding(')
-              s = s.replace('const Align(', 'Align(')
-              p.write_text(s)
           PY
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
+      - name: Format offline app
+        run: dart format lib/main.dart
+
+      - name: Analyze offline app
+        run: flutter analyze --no-fatal-infos lib/main.dart
 
       - name: Build release APK
         run: flutter build apk --release
@@ -147,7 +69,7 @@ jobs:
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gg-messenger-android-${{ github.run_number }}
+          name: gg-messenger-offline-android-${{ github.run_number }}
           if-no-files-found: error
           path: |
             build/app/outputs/flutter-apk/app-release.apk
