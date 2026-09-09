@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/call_service.dart';
+import 'services/recording_file.dart';
 import 'services/typing_service.dart';
 
 class ChatPage extends StatefulWidget {
@@ -210,12 +209,12 @@ class _ChatPageState extends State<ChatPage> {
       if (duration < 500) return;
       try {
         setState(() => uploading = true);
-        final bytes = await File(path).readAsBytes();
-        final storagePath = '$userId/${widget.conversationId}/${DateTime.now().millisecondsSinceEpoch}_voice.m4a';
+        final bytes = await readRecordingBytes(path);
+        final storagePath = '$userId/${widget.conversationId}/${DateTime.now().millisecondsSinceEpoch}_voice.$recordingFileExtension';
         await supabase.storage.from('chat-media').uploadBinary(
           storagePath,
           bytes,
-          fileOptions: const FileOptions(contentType: 'audio/mp4', upsert: false),
+          fileOptions: FileOptions(contentType: recordingMimeType, upsert: false),
         );
         await supabase.from('messages').insert({
           'conversation_id': widget.conversationId,
@@ -223,12 +222,12 @@ class _ChatPageState extends State<ChatPage> {
           'body': 'Voice message',
           'message_type': 'audio',
           'media_url': storagePath,
-          'file_name': 'voice.m4a',
+          'file_name': 'voice.$recordingFileExtension',
           'file_size': bytes.length,
-          'mime_type': 'audio/mp4',
+          'mime_type': recordingMimeType,
           'duration_ms': duration,
         });
-        try { await File(path).delete(); } catch (_) {}
+        await deleteRecordingFile(path);
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voice note failed: $e')));
       } finally {
@@ -241,9 +240,9 @@ class _ChatPageState extends State<ChatPage> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Microphone permission is required.')));
       return;
     }
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/gg_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 24000, sampleRate: 16000, numChannels: 1), path: path);
+    final path = await recordingPath('gg_voice_${DateTime.now().millisecondsSinceEpoch}.$recordingFileExtension');
+    final encoder = kIsWeb ? AudioEncoder.wav : AudioEncoder.aacLc;
+    await recorder.start(RecordConfig(encoder: encoder, bitRate: 24000, sampleRate: 16000, numChannels: 1), path: path);
     recordClock = Stopwatch()..start();
     if (mounted) setState(() => recording = true);
   }

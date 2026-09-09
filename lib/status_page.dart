@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -51,20 +49,21 @@ class _StatusPageState extends State<StatusPage> {
 
   Future<void> _mediaStatus() async {
     if (uploading) return;
-    final result = await FilePicker.platform.pickFiles(type: FileType.media, withData: false);
+    final result = await FilePicker.platform.pickFiles(type: FileType.media, withData: true);
     final file = result?.files.single;
-    if (file?.path == null) return;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
     final extension = file!.extension?.toLowerCase() ?? '';
     final isVideo = ['mp4', 'mov', 'm4v', 'webm'].contains(extension);
     final type = isVideo ? 'video' : 'image';
-    final contentType = isVideo ? 'video/$extension' : 'image/$extension';
+    final contentType = _contentType(extension, isVideo);
     final userId = supabase.auth.currentUser!.id;
     final storagePath = '$userId/${DateTime.now().millisecondsSinceEpoch}.$extension';
     setState(() => uploading = true);
     try {
-      await supabase.storage.from('status-media').upload(
+      await supabase.storage.from('status-media').uploadBinary(
         storagePath,
-        File(file.path!),
+        bytes,
         fileOptions: FileOptions(contentType: contentType, upsert: false),
       );
       await supabase.from('statuses').insert({
@@ -77,6 +76,14 @@ class _StatusPageState extends State<StatusPage> {
     } finally {
       if (mounted) setState(() => uploading = false);
     }
+  }
+
+  String _contentType(String extension, bool isVideo) {
+    const types = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
+      'mp4': 'video/mp4', 'mov': 'video/quicktime', 'm4v': 'video/x-m4v', 'webm': 'video/webm',
+    };
+    return types[extension] ?? (isVideo ? 'video/*' : 'image/*');
   }
 
   Future<String?> _url(String path) async {
