@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool isSignUp = false;
   bool codeSent = false;
+  bool loginChallenge = false;
   bool loading = false;
   bool resending = false;
   bool obscurePassword = true;
@@ -31,50 +32,44 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> submit() async {
     if (!validEmail) {
-      setState(() {
-        error = 'Enter a valid email address.';
-        notice = null;
-      });
+      setState(() { error = 'Enter a valid email address.'; notice = null; });
       return;
     }
     if (password.length < 8) {
-      setState(() {
-        error = 'Password must be at least 8 characters.';
-        notice = null;
-      });
+      setState(() { error = 'Password must be at least 8 characters.'; notice = null; });
       return;
     }
     if (isSignUp && password != confirmPassword) {
-      setState(() {
-        error = 'Passwords do not match.';
-        notice = null;
-      });
+      setState(() { error = 'Passwords do not match.'; notice = null; });
       return;
     }
 
-    setState(() {
-      loading = true;
-      error = null;
-      notice = null;
-    });
+    setState(() { loading = true; error = null; notice = null; });
 
     try {
       final auth = Supabase.instance.client.auth;
       if (isSignUp) {
         final response = await auth.signUp(email: email, password: password);
         if (!mounted) return;
-
-        if (response.session != null) {
-          // Email confirmation is disabled; AuthGate will open the app.
-          return;
-        }
-
+        if (response.session != null) return;
         setState(() {
           codeSent = true;
+          loginChallenge = false;
           notice = 'We sent an 8-digit verification code to $email.';
         });
       } else {
+        // Password is checked first. We then require a fresh email OTP before
+        // restoring an authenticated session for this login.
         await auth.signInWithPassword(email: email, password: password);
+        await auth.signOut();
+        await auth.signInWithOtp(email: email, shouldCreateUser: false);
+        if (!mounted) return;
+        otpController.clear();
+        setState(() {
+          codeSent = true;
+          loginChallenge = true;
+          notice = 'Password accepted. We sent a new 8-digit OTP to $email.';
+        });
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
@@ -95,17 +90,13 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    setState(() {
-      loading = true;
-      error = null;
-      notice = null;
-    });
+    setState(() { loading = true; error = null; notice = null; });
 
     try {
       await Supabase.instance.client.auth.verifyOTP(
         email: email,
         token: otp,
-        type: OtpType.signup,
+        type: loginChallenge ? OtpType.email : OtpType.signup,
       );
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
@@ -119,18 +110,20 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> resendVerification() async {
     if (loading || resending || !validEmail) return;
 
-    setState(() {
-      resending = true;
-      error = null;
-      notice = null;
-    });
+    setState(() { resending = true; error = null; notice = null; });
 
     try {
-      await Supabase.instance.client.auth.resend(
-        type: OtpType.signup,
-        email: email,
-      );
-      if (mounted) setState(() => notice = 'A new 8-digit verification code was sent.');
+      final auth = Supabase.instance.client.auth;
+      if (loginChallenge) {
+        await auth.signInWithOtp(email: email, shouldCreateUser: false);
+      } else {
+        await auth.resend(type: OtpType.signup, email: email);
+      }
+      if (mounted) {
+        setState(() => notice = loginChallenge
+            ? 'A new 8-digit login OTP was sent.'
+            : 'A new 8-digit verification code was sent.');
+      }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
     } catch (_) {
@@ -143,6 +136,7 @@ class _LoginPageState extends State<LoginPage> {
   void backToLogin() {
     setState(() {
       codeSent = false;
+      loginChallenge = false;
       isSignUp = false;
       otpController.clear();
       confirmPasswordController.clear();
@@ -182,20 +176,14 @@ class _LoginPageState extends State<LoginPage> {
                     child: Icon(Icons.forum_rounded, size: 54, color: scheme.onPrimary),
                   ),
                   const SizedBox(height: 18),
-                  Text(
-                    'GG Messenger',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.6,
-                        ),
-                  ),
+                  Text('GG Messenger', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, letterSpacing: -0.6)),
                   const SizedBox(height: 8),
                   Text(
                     codeSent
-                        ? 'Verify your email address'
+                        ? (loginChallenge ? 'Verify your login' : 'Verify your email address')
                         : isSignUp
                             ? 'Create your account with email and password'
-                            : 'Sign in with your email and password',
+                            : 'Sign in with email, password and OTP',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 30),
@@ -204,11 +192,7 @@ class _LoginPageState extends State<LoginPage> {
                     enabled: !codeSent && !loading,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Email address',
-                      hintText: 'you@example.com',
-                      prefixIcon: Icon(Icons.email_rounded),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Email address', hintText: 'you@example.com', prefixIcon: Icon(Icons.email_rounded)),
                   ),
                   if (!codeSent) ...[
                     const SizedBox(height: 12),
@@ -232,10 +216,7 @@ class _LoginPageState extends State<LoginPage> {
                         controller: confirmPasswordController,
                         enabled: !loading,
                         obscureText: obscurePassword,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm password',
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
-                        ),
+                        decoration: const InputDecoration(labelText: 'Confirm password', prefixIcon: Icon(Icons.lock_outline_rounded)),
                       ),
                     ],
                   ],
@@ -247,48 +228,24 @@ class _LoginPageState extends State<LoginPage> {
                       maxLength: 8,
                       autofocus: true,
                       onSubmitted: (_) => loading ? null : verifyEmail(),
-                      decoration: const InputDecoration(
-                        labelText: '8-digit verification code',
+                      decoration: InputDecoration(
+                        labelText: '8-digit ${loginChallenge ? 'login OTP' : 'verification code'}',
                         hintText: '12345678',
-                        prefixIcon: Icon(Icons.verified_user_rounded),
+                        prefixIcon: const Icon(Icons.verified_user_rounded),
                         counterText: '',
                       ),
                     ),
                   ],
                   const SizedBox(height: 14),
-                  if (notice != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Text(
-                        notice!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Text(
-                        error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.error),
-                      ),
-                    ),
+                  if (notice != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(notice!, textAlign: TextAlign.center, style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600))),
+                  if (error != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(error!, textAlign: TextAlign.center, style: TextStyle(color: scheme.error))),
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: FilledButton.icon(
                       onPressed: loading ? null : (codeSent ? verifyEmail : submit),
                       icon: Icon(codeSent ? Icons.verified_rounded : (isSignUp ? Icons.person_add_rounded : Icons.login_rounded)),
-                      label: Text(
-                        loading
-                            ? 'Please wait...'
-                            : codeSent
-                                ? 'Verify email'
-                                : isSignUp
-                                    ? 'Create account'
-                                    : 'Sign in',
-                      ),
+                      label: Text(loading ? 'Please wait...' : codeSent ? 'Verify & continue' : isSignUp ? 'Create account' : 'Sign in & send OTP'),
                     ),
                   ),
                   if (codeSent) ...[
@@ -296,27 +253,15 @@ class _LoginPageState extends State<LoginPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        TextButton(
-                          onPressed: loading || resending ? null : resendVerification,
-                          child: Text(resending ? 'Sending...' : 'Resend code'),
-                        ),
+                        TextButton(onPressed: loading || resending ? null : resendVerification, child: Text(resending ? 'Sending...' : 'Resend OTP')),
                         const Text(' • '),
-                        TextButton(
-                          onPressed: loading ? null : backToLogin,
-                          child: const Text('Back to login'),
-                        ),
+                        TextButton(onPressed: loading ? null : backToLogin, child: const Text('Back to login')),
                       ],
                     ),
                   ] else ...[
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: loading
-                          ? null
-                          : () => setState(() {
-                                isSignUp = !isSignUp;
-                                error = null;
-                                notice = null;
-                              }),
+                      onPressed: loading ? null : () => setState(() { isSignUp = !isSignUp; error = null; notice = null; }),
                       child: Text(isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'),
                     ),
                   ],
@@ -324,7 +269,7 @@ class _LoginPageState extends State<LoginPage> {
                   Text(
                     isSignUp
                         ? 'Your email verification code is 8 digits. Never share it with anyone.'
-                        : 'Use the email and password you registered with.',
+                        : 'Every login requires your password and a fresh 8-digit code sent to your email.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
