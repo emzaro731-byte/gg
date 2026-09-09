@@ -17,7 +17,9 @@ class _ProfilePageState extends State<ProfilePage> {
   bool loading = true;
   bool saving = false;
   bool uploadingPhoto = false;
+  bool checkingUsername = false;
   String? error;
+  String? usernameHint;
   String? avatarUrl;
 
   SupabaseClient get supabase => Supabase.instance.client;
@@ -36,11 +38,16 @@ class _ProfilePageState extends State<ProfilePage> {
           .select('display_name, username, bio, avatar_url')
           .eq('id', userId)
           .maybeSingle();
+      final metadata = supabase.auth.currentUser?.userMetadata ?? const <String, dynamic>{};
+
       if (row != null) {
-        displayName.text = row['display_name']?.toString() ?? '';
-        username.text = row['username']?.toString() ?? '';
+        displayName.text = row['display_name']?.toString() ?? metadata['display_name']?.toString() ?? '';
+        username.text = row['username']?.toString() ?? metadata['username']?.toString() ?? '';
         bio.text = row['bio']?.toString() ?? '';
         avatarUrl = row['avatar_url']?.toString();
+      } else {
+        displayName.text = metadata['display_name']?.toString() ?? '';
+        username.text = metadata['username']?.toString() ?? '';
       }
     } on PostgrestException catch (e) {
       error = e.message;
@@ -59,10 +66,7 @@ class _ProfilePageState extends State<ProfilePage> {
     });
 
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        withData: true,
-      );
+      final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
       if (result == null || result.files.single.bytes == null) return;
 
       final bytes = result.files.single.bytes!;
@@ -70,70 +74,34 @@ class _ProfilePageState extends State<ProfilePage> {
         throw Exception('Please choose an image smaller than 12 MB.');
       }
 
-      // Decode, center-crop to a square, then resize locally. This keeps the
-      // uploaded profile photo small and works on both Android and web.
       final decoded = img.decodeImage(bytes);
-      if (decoded == null) {
-        throw Exception('That image could not be processed.');
-      }
+      if (decoded == null) throw Exception('That image could not be processed.');
 
       final side = decoded.width < decoded.height ? decoded.width : decoded.height;
       final offsetX = (decoded.width - side) ~/ 2;
       final offsetY = (decoded.height - side) ~/ 2;
-      final square = img.copyCrop(
-        decoded,
-        x: offsetX,
-        y: offsetY,
-        width: side,
-        height: side,
-      );
-
-      final avatar = img.copyResize(
-        square,
-        width: 512,
-        height: 512,
-        interpolation: img.Interpolation.cubic,
-      );
-      final thumbnail = img.copyResize(
-        square,
-        width: 128,
-        height: 128,
-        interpolation: img.Interpolation.cubic,
-      );
-
+      final square = img.copyCrop(decoded, x: offsetX, y: offsetY, width: side, height: side);
+      final avatar = img.copyResize(square, width: 512, height: 512, interpolation: img.Interpolation.cubic);
+      final thumbnail = img.copyResize(square, width: 128, height: 128, interpolation: img.Interpolation.cubic);
       final avatarBytes = img.encodeJpg(avatar, quality: 82);
       final thumbnailBytes = img.encodeJpg(thumbnail, quality: 78);
 
-      // Fixed JPEG paths mean every new upload replaces the previous avatar
-      // instead of accumulating differently-named files in Storage.
-      const avatarPath = 'PLACEHOLDER/avatar.jpg';
-      const thumbnailPath = 'PLACEHOLDER/avatar_thumb.jpg';
-      final path = avatarPath.replaceFirst('PLACEHOLDER', userId);
-      final thumbPath = thumbnailPath.replaceFirst('PLACEHOLDER', userId);
+      final path = '$userId/avatar.jpg';
+      final thumbPath = '$userId/avatar_thumb.jpg';
 
       await supabase.storage.from('avatars').uploadBinary(
         path,
         avatarBytes,
-        fileOptions: const FileOptions(
-          contentType: 'image/jpeg',
-          cacheControl: '86400',
-          upsert: true,
-        ),
+        fileOptions: const FileOptions(contentType: 'image/jpeg', cacheControl: '86400', upsert: true),
       );
-
       await supabase.storage.from('avatars').uploadBinary(
         thumbPath,
         thumbnailBytes,
-        fileOptions: const FileOptions(
-          contentType: 'image/jpeg',
-          cacheControl: '86400',
-          upsert: true,
-        ),
+        fileOptions: const FileOptions(contentType: 'image/jpeg', cacheControl: '86400', upsert: true),
       );
 
       final publicUrl = supabase.storage.from('avatars').getPublicUrl(thumbPath);
       final cacheBustedUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-
       await supabase.from('profiles').update({
         'avatar_url': cacheBustedUrl,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
@@ -141,27 +109,52 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (mounted) {
         setState(() => avatarUrl = cacheBustedUrl);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile photo cropped and optimized')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile photo updated')));
       }
     } on StorageException catch (e) {
       if (mounted) setState(() => error = e.message);
     } on PostgrestException catch (e) {
       if (mounted) setState(() => error = e.message);
     } catch (e) {
-      if (mounted) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
-      }
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => uploadingPhoto = false);
     }
   }
 
+  String _normalizeUsername(String value) => value.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_.]'), '');
+
+  Future<void> _checkUsername() async {
+    final handle = _normalizeUsername(username.text);
+    if (handle.isEmpty) {
+      setState(() => usernameHint = 'Username is optional.');
+      return;
+    }
+    if (handle.length < 3 || handle.length > 30) {
+      setState(() => usernameHint = 'Use 3–30 letters, numbers, underscores or dots.');
+      return;
+    }
+
+    setState(() {
+      checkingUsername = true;
+      usernameHint = null;
+    });
+    try {
+      final existing = await supabase.from('profiles').select('id').eq('username', handle).neq('id', userId).maybeSingle();
+      if (!mounted) return;
+      setState(() => usernameHint = existing == null ? 'Username is available ✓' : 'Username is already taken.');
+    } catch (_) {
+      if (mounted) setState(() => usernameHint = null);
+    } finally {
+      if (mounted) setState(() => checkingUsername = false);
+    }
+  }
+
   Future<void> _save() async {
     final name = displayName.text.trim();
-    final handle = username.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_.]'), '');
+    final handle = _normalizeUsername(username.text);
     final about = bio.text.trim();
+
     if (name.length < 2) {
       setState(() => error = 'Display name must be at least 2 characters.');
       return;
@@ -170,8 +163,18 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() => error = 'Username must be 3–30 characters.');
       return;
     }
-    setState(() { saving = true; error = null; });
+
+    setState(() {
+      saving = true;
+      error = null;
+    });
+
     try {
+      if (handle.isNotEmpty) {
+        final existing = await supabase.from('profiles').select('id').eq('username', handle).neq('id', userId).maybeSingle();
+        if (existing != null) throw const PostgrestException(message: 'That username is already taken.');
+      }
+
       await supabase.from('profiles').upsert({
         'id': userId,
         'display_name': name,
@@ -180,14 +183,24 @@ class _ProfilePageState extends State<ProfilePage> {
         'avatar_url': avatarUrl,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
+
+      // Keep Auth metadata synchronized because parts of GG use user metadata
+      // for the signed-in user's name and username.
+      await supabase.auth.updateUser(
+        UserAttributes(data: {
+          'display_name': name,
+          'username': handle.isEmpty ? null : handle,
+        }),
+      );
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated')));
-        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully')));
+        Navigator.pop(context, true);
       }
     } on PostgrestException catch (e) {
-      if (mounted) setState(() => error = e.message.contains('duplicate') ? 'That username is already taken.' : e.message);
-    } catch (_) {
-      if (mounted) setState(() => error = 'Could not save your profile.');
+      if (mounted) setState(() => error = e.message.toLowerCase().contains('duplicate') || e.message.toLowerCase().contains('unique') ? 'That username is already taken.' : e.message);
+    } catch (e) {
+      if (mounted) setState(() => error = 'Could not save your profile. Please try again.');
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -220,14 +233,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         CircleAvatar(
                           radius: 52,
-                          backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty
-                              ? NetworkImage(avatarUrl!)
-                              : null,
+                          backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty ? NetworkImage(avatarUrl!) : null,
                           child: avatarUrl == null || avatarUrl!.isEmpty
-                              ? Text(
-                                  (displayName.text.isEmpty ? 'G' : displayName.text[0]).toUpperCase(),
-                                  style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800),
-                                )
+                              ? Text((displayName.text.isEmpty ? 'G' : displayName.text[0]).toUpperCase(), style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800))
                               : null,
                         ),
                         Material(
@@ -248,22 +256,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: uploadingPhoto ? null : _changePhoto,
-                      icon: const Icon(Icons.photo_camera_rounded),
-                      label: Text(uploadingPhoto ? 'Processing…' : 'Change profile photo'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Square crop • 512px avatar • 128px thumbnail',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
                   TextField(
                     controller: displayName,
                     textCapitalization: TextCapitalization.words,
@@ -273,7 +266,22 @@ class _ProfilePageState extends State<ProfilePage> {
                   TextField(
                     controller: username,
                     autocorrect: false,
-                    decoration: const InputDecoration(labelText: 'Username', prefixText: '@', prefixIcon: Icon(Icons.alternate_email)),
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) {
+                      if (usernameHint != null) setState(() => usernameHint = null);
+                    },
+                    onEditingComplete: _checkUsername,
+                    decoration: InputDecoration(
+                      labelText: 'Username',
+                      hintText: 'your_username',
+                      prefixText: '@',
+                      prefixIcon: const Icon(Icons.alternate_email),
+                      suffixIcon: checkingUsername
+                          ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                          : IconButton(onPressed: _checkUsername, icon: const Icon(Icons.check_circle_outline_rounded)),
+                      helperText: usernameHint ?? 'You can change your username at any time.',
+                      helperStyle: TextStyle(color: usernameHint?.contains('available') == true ? Colors.green : null),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   TextField(
