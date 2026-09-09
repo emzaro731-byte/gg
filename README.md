@@ -4,10 +4,9 @@ A modern Flutter + Supabase realtime messenger foundation.
 
 ## Stack
 - Flutter / Dart
-- Supabase Auth, Postgres, Realtime and Storage
+- Supabase Auth, Postgres, Realtime, Storage and Edge Functions
 - Material 3
 - WebRTC voice/video calling
-- Firebase Cloud Messaging for push notifications
 
 ## Current Flutter features
 - Email/password sign in and sign up
@@ -39,20 +38,17 @@ flutter run --dart-define=SUPABASE_URL=YOUR_URL --dart-define=SUPABASE_PUBLISHAB
 
 The Flutter client uses the Supabase publishable key. Never put a Supabase secret/service-role key in a mobile app. Protect data with RLS and expose only the tables/functions the client needs.
 
-## Firebase push notifications
+## Backend architecture
 
-Firebase is optional for local development, but Android push notifications require a Firebase Android app configuration.
+GG Messenger uses Supabase as its primary backend:
+- **Auth:** accounts and sessions
+- **Postgres:** profiles, conversations, members, messages, calls and device/app data
+- **Realtime:** live messages, presence, typing and WebRTC signaling
+- **Storage:** private chat media and voice notes
+- **Edge Functions:** server-side logic, AI integrations, webhooks and notification orchestration
+- **RLS:** user-level access control
 
-1. Open the Firebase Console and create/select a Firebase project.
-2. Add an Android app using the exact Android package/application ID generated for GG Messenger.
-3. Download `google-services.json` and keep the file private to your build configuration.
-4. For local Android builds, place it at `android/app/google-services.json`.
-5. For GitHub Actions, add a repository secret named `FIREBASE_ANDROID_JSON` whose value is the complete contents of `google-services.json`.
-6. Push a commit or manually run the **Build GG Messenger APK** workflow.
-
-The workflow automatically installs the Firebase JSON and Google Services Gradle plugin when the secret is present. Firebase initialization is also guarded so the app can still run without Firebase during development.
-
-Firebase's official Flutter setup uses `flutterfire configure` and can generate `firebase_options.dart`; for this Android-only CI path, the native `google-services.json` route is used. See the official Firebase setup documentation for the package-name and configuration requirements.
+Push notifications can be added later through a push provider while keeping Supabase as the source of truth for users, messages and notification events.
 
 ## Airtel data saver
 
