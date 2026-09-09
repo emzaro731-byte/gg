@@ -52,9 +52,7 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
     });
 
     await _refreshConnectivity();
-    _connectivitySubscription = connectivity.onConnectivityChanged.listen((result) {
-      _setConnectivity(result);
-    });
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen(_setConnectivity);
   }
 
   Future<void> _refreshConnectivity() async {
@@ -91,9 +89,8 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
         .listen((rows) async {
           await OfflineCacheService.instance.saveConversations(id, rows);
           if (mounted) setState(() => _cachedConversations = rows);
-        }, onError: (_) {
-          // Never replace the cached UI with a network exception.
-        });
+          await _cacheMessages(id, rows);
+        }, onError: (_) {});
 
     _settingsSubscription = supabase
         .from('conversation_user_settings')
@@ -105,6 +102,31 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
         }, onError: (_) {});
   }
 
+  Future<void> _cacheMessages(
+    String id,
+    List<Map<String, dynamic>> conversations,
+  ) async {
+    // Keep a useful local history without trying to mirror an unlimited mailbox.
+    for (final conversation in conversations.take(30)) {
+      final conversationId = conversation['id']?.toString();
+      if (conversationId == null || conversationId.isEmpty) continue;
+      try {
+        final rows = await supabase
+            .from('messages')
+            .select('id, conversation_id, sender_id, body, message_type, media_url, file_name, file_size, mime_type, duration_ms, reply_to, edited_at, created_at')
+            .eq('conversation_id', conversationId)
+            .order('created_at', ascending: false)
+            .limit(500);
+        final messages = List<Map<String, dynamic>>.from(rows)
+          ..sort((a, b) => (a['created_at']?.toString() ?? '')
+              .compareTo(b['created_at']?.toString() ?? ''));
+        await OfflineCacheService.instance.saveMessages(id, conversationId, messages);
+      } catch (_) {
+        // A single failed conversation must never break offline mode.
+      }
+    }
+  }
+
   Future<void> _stopCaching() async {
     await _conversationSubscription?.cancel();
     await _settingsSubscription?.cancel();
@@ -114,9 +136,7 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _refreshConnectivity();
-    }
+    if (state == AppLifecycleState.resumed) _refreshConnectivity();
   }
 
   @override
@@ -176,13 +196,10 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
   }
 
   Widget _offlineList(BuildContext context) {
-    if (_loadingCache) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loadingCache) return const Center(child: CircularProgressIndicator());
 
     final settings = <String, Map<String, dynamic>>{
-      for (final row in _cachedSettings)
-        row['conversation_id'].toString(): row,
+      for (final row in _cachedSettings) row['conversation_id'].toString(): row,
     };
 
     final rows = [..._cachedConversations]..sort((a, b) {
@@ -202,15 +219,9 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
             children: [
               Icon(Icons.cloud_off_rounded, size: 52),
               SizedBox(height: 12),
-              Text(
-                'You are offline',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
+              Text('You are offline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               SizedBox(height: 6),
-              Text(
-                'Open chats while online first. GG will keep them on this device for offline use.',
-                textAlign: TextAlign.center,
-              ),
+              Text('Open chats while online first. GG will keep them on this device for offline use.', textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -237,28 +248,13 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-            leading: CircleAvatar(
-              radius: 27,
-              child: Text(initial, style: const TextStyle(fontWeight: FontWeight.w900)),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                ),
-                if (pinned) const Icon(Icons.push_pin_rounded, size: 16),
-                if (muted) const Padding(
-                  padding: EdgeInsets.only(left: 5),
-                  child: Icon(Icons.notifications_off_rounded, size: 16),
-                ),
-              ],
-            ),
-            subtitle: Text(
-              (chat['last_message'] ?? 'Tap to open').toString(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            leading: CircleAvatar(radius: 27, child: Text(initial, style: const TextStyle(fontWeight: FontWeight.w900))),
+            title: Row(children: [
+              Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
+              if (pinned) const Icon(Icons.push_pin_rounded, size: 16),
+              if (muted) const Padding(padding: EdgeInsets.only(left: 5), child: Icon(Icons.notifications_off_rounded, size: 16)),
+            ]),
+            subtitle: Text((chat['last_message'] ?? 'Tap to open').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: () => _openOfflineChat(context, id, title),
           ),
         );
@@ -266,24 +262,12 @@ class _OfflineFirstChatsPageState extends State<OfflineFirstChatsPage>
     );
   }
 
-  Future<void> _openOfflineChat(
-    BuildContext context,
-    String conversationId,
-    String title,
-  ) async {
+  Future<void> _openOfflineChat(BuildContext context, String conversationId, String title) async {
     final id = userId;
     if (id == null) return;
     final messages = await OfflineCacheService.instance.loadMessages(id, conversationId);
     if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OfflineMessagesPage(
-          title: title,
-          messages: messages,
-        ),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => OfflineMessagesPage(title: title, messages: messages)));
   }
 }
 
@@ -297,13 +281,11 @@ class OfflineMessagesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            CircleAvatar(child: Text(title.isEmpty ? '?' : title[0].toUpperCase())),
-            const SizedBox(width: 10),
-            Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)),
-          ],
-        ),
+        title: Row(children: [
+          CircleAvatar(child: Text(title.isEmpty ? '?' : title[0].toUpperCase())),
+          const SizedBox(width: 10),
+          Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ]),
       ),
       body: messages.isEmpty
           ? const Center(child: Text('No messages saved on this device yet.'))
@@ -322,22 +304,14 @@ class OfflineMessagesPage extends StatelessWidget {
                     margin: const EdgeInsets.only(bottom: 7),
                     padding: const EdgeInsets.fromLTRB(14, 10, 11, 7),
                     decoration: BoxDecoration(
-                      color: mine
-                          ? Theme.of(context).colorScheme.primaryContainer
-                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: mine ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(body),
-                        if (created != null)
-                          Text(
-                            '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                      ],
-                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(body),
+                      if (created != null)
+                        Text('${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}', style: Theme.of(context).textTheme.labelSmall),
+                    ]),
                   ),
                 );
               },
