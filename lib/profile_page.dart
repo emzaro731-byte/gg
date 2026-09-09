@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -64,40 +65,73 @@ class _ProfilePageState extends State<ProfilePage> {
       );
       if (result == null || result.files.single.bytes == null) return;
 
-      final file = result.files.single;
-      final bytes = file.bytes!;
-      if (bytes.length > 8 * 1024 * 1024) {
-        throw Exception('Profile photo must be 8 MB or smaller.');
+      final bytes = result.files.single.bytes!;
+      if (bytes.length > 12 * 1024 * 1024) {
+        throw Exception('Please choose an image smaller than 12 MB.');
       }
 
-      final extension = (file.extension ?? 'jpg').toLowerCase();
-      final safeExtension = switch (extension) {
-        'png' => 'png',
-        'webp' => 'webp',
-        'gif' => 'gif',
-        'heic' => 'heic',
-        _ => 'jpg',
-      };
-      final path = '$userId/avatar.$safeExtension';
-      final contentType = switch (safeExtension) {
-        'png' => 'image/png',
-        'webp' => 'image/webp',
-        'gif' => 'image/gif',
-        'heic' => 'image/heic',
-        _ => 'image/jpeg',
-      };
+      // Decode, center-crop to a square, then resize locally. This keeps the
+      // uploaded profile photo small and works on both Android and web.
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw Exception('That image could not be processed.');
+      }
+
+      final side = decoded.width < decoded.height ? decoded.width : decoded.height;
+      final offsetX = (decoded.width - side) ~/ 2;
+      final offsetY = (decoded.height - side) ~/ 2;
+      final square = img.copyCrop(
+        decoded,
+        x: offsetX,
+        y: offsetY,
+        width: side,
+        height: side,
+      );
+
+      final avatar = img.copyResize(
+        square,
+        width: 512,
+        height: 512,
+        interpolation: img.Interpolation.cubic,
+      );
+      final thumbnail = img.copyResize(
+        square,
+        width: 128,
+        height: 128,
+        interpolation: img.Interpolation.cubic,
+      );
+
+      final avatarBytes = img.encodeJpg(avatar, quality: 82);
+      final thumbnailBytes = img.encodeJpg(thumbnail, quality: 78);
+
+      // Fixed JPEG paths mean every new upload replaces the previous avatar
+      // instead of accumulating differently-named files in Storage.
+      const avatarPath = 'PLACEHOLDER/avatar.jpg';
+      const thumbnailPath = 'PLACEHOLDER/avatar_thumb.jpg';
+      final path = avatarPath.replaceFirst('PLACEHOLDER', userId);
+      final thumbPath = thumbnailPath.replaceFirst('PLACEHOLDER', userId);
 
       await supabase.storage.from('avatars').uploadBinary(
         path,
-        bytes,
-        fileOptions: FileOptions(
-          contentType: contentType,
-          cacheControl: '3600',
+        avatarBytes,
+        fileOptions: const FileOptions(
+          contentType: 'image/jpeg',
+          cacheControl: '86400',
           upsert: true,
         ),
       );
 
-      final publicUrl = supabase.storage.from('avatars').getPublicUrl(path);
+      await supabase.storage.from('avatars').uploadBinary(
+        thumbPath,
+        thumbnailBytes,
+        fileOptions: const FileOptions(
+          contentType: 'image/jpeg',
+          cacheControl: '86400',
+          upsert: true,
+        ),
+      );
+
+      final publicUrl = supabase.storage.from('avatars').getPublicUrl(thumbPath);
       final cacheBustedUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
 
       await supabase.from('profiles').update({
@@ -108,7 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         setState(() => avatarUrl = cacheBustedUrl);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile photo updated')),
+          const SnackBar(content: Text('Profile photo cropped and optimized')),
         );
       }
     } on StorageException catch (e) {
@@ -219,7 +253,14 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: TextButton.icon(
                       onPressed: uploadingPhoto ? null : _changePhoto,
                       icon: const Icon(Icons.photo_camera_rounded),
-                      label: Text(uploadingPhoto ? 'Uploading…' : 'Change profile photo'),
+                      label: Text(uploadingPhoto ? 'Processing…' : 'Change profile photo'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Square crop • 512px avatar • 128px thumbnail',
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
                     ),
                   ),
                   const SizedBox(height: 14),
