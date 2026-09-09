@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,6 +41,13 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Validate Supabase configuration
+        shell: bash
+        run: |
+          test -n "$SUPABASE_URL" || (echo "Missing GitHub secret: SUPABASE_URL" && exit 1)
+          test -n "$SUPABASE_PUBLISHABLE_KEY" || (echo "Missing GitHub secret: SUPABASE_PUBLISHABLE_KEY" && exit 1)
+          echo "Supabase build configuration is present."
+
       - name: Get dependencies
         run: flutter pub get
 
@@ -45,7 +55,10 @@ jobs:
         run: flutter analyze
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY="$SUPABASE_PUBLISHABLE_KEY"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
