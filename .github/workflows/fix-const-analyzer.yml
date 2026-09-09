@@ -13,35 +13,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
-      - name: Remove invalid const wrappers
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          for name in ('lib/chat_page.dart', 'lib/gg_ai_page.dart'):
-              p = Path(name)
-              text = p.read_text()
-              text = text.replace("const Padding(\n            padding: EdgeInsets.fromLTRB(20, 0, 20, 6),", "Padding(\n            padding: EdgeInsets.fromLTRB(20, 0, 20, 6),")
-              text = text.replace("const Padding(\n            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),", "Padding(\n            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),")
-              p.write_text(text)
-          PY
-      - name: Format and analyze
-        run: |
-          flutter pub get
-          dart format lib/chat_page.dart lib/gg_ai_page.dart
-          flutter analyze --no-fatal-infos
-      - name: Commit fix
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Apply Dart analyzer fixes
+        run: dart fix --apply
+
+      - name: Format affected files
+        run: dart format lib/chat_page.dart lib/gg_ai_page.dart lib/status_page.dart lib/gg_image_page.dart
+
+      - name: Verify analyzer
+        run: flutter analyze --no-fatal-infos
+
+      - name: Commit fixes
         run: |
           if git diff --quiet; then
-            echo 'No changes required.'
+            echo 'No changes were necessary.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add lib/chat_page.dart lib/gg_ai_page.dart
-          git commit -m 'fix: remove invalid const wrappers'
+          git add lib/chat_page.dart lib/gg_ai_page.dart lib/status_page.dart lib/gg_image_page.dart
+          git commit -m 'fix: resolve Dart const analyzer errors'
           git push
