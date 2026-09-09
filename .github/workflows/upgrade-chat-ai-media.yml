@@ -1,0 +1,93 @@
+name: Upgrade chat AI media and feedback
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Patch chat, status and image download
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'Expected text not found in {path}: {old[:80]}')
+              p.write_text(s.replace(old, new, 1))
+
+          replace('lib/chat_page.dart',
+            "import 'package:supabase_flutter/supabase_flutter.dart';\n",
+            "import 'package:supabase_flutter/supabase_flutter.dart';\nimport 'package:flutter/services.dart';\nimport 'package:share_plus/share_plus.dart';\nimport 'package:speech_to_text/speech_recognition_result.dart';\nimport 'package:speech_to_text/speech_to_text.dart' as stt;\n")
+          replace('lib/chat_page.dart',
+            "  final recorder = AudioRecorder();\n",
+            "  final recorder = AudioRecorder();\n  final speech = stt.SpeechToText();\n")
+          replace('lib/chat_page.dart',
+            "  bool recording = false;\n",
+            "  bool recording = false;\n  bool dictating = false;\n")
+          replace('lib/chat_page.dart',
+            "  Future<void> deleteMessage(String id) async {\n",
+            """  Future<void> _toggleDictation() async {\n    if (dictating) {\n      await speech.stop();\n      if (mounted) setState(() => dictating = false);\n      return;\n    }\n    final available = await speech.initialize(\n      onStatus: (status) { if (mounted && status == 'done') setState(() => dictating = false); },\n      onError: (_) { if (mounted) setState(() => dictating = false); },\n    );\n    if (!available) return;\n    if (mounted) setState(() => dictating = true);\n    await speech.listen(\n      onResult: (SpeechRecognitionResult result) {\n        if (!mounted) return;\n        setState(() => controller.text = result.recognizedWords);\n        controller.selection = TextSelection.collapsed(offset: controller.text.length);\n      },\n      listenOptions: const stt.SpeechListenOptions(partialResults: true, listenMode: stt.ListenMode.dictation),\n    );\n  }\n\n  Future<void> _copyMessage(String text) async {\n    await Clipboard.setData(ClipboardData(text: text));\n    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied')));\n  }\n\n  Future<void> _shareMessage(Map<String, dynamic> message) async {\n    final path = message['media_url']?.toString();\n    if (path != null && path.isNotEmpty) {\n      final url = await signedUrl(path);\n      if (url != null) await Share.share(url);\n      return;\n    }\n    await Share.share(message['body']?.toString() ?? 'GG Messenger');\n  }\n\n  Future<void> _feedbackMessage(String id, int value) async {\n    try {\n      await supabase.from('message_feedback').upsert({\n        'message_id': id,\n        'user_id': userId,\n        'value': value,\n        'updated_at': DateTime.now().toUtc().toIso8601String(),\n      });\n      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value == 1 ? 'Liked' : 'Disliked')));\n    } catch (_) {}\n  }\n\n  Future<void> deleteMessage(String id) async {\n""")
+          replace('lib/chat_page.dart',
+            "          ListTile(leading: const Icon(Icons.reply_rounded), title: const Text('Reply'), onTap: () { Navigator.pop(context); setState(() => replyingTo = message); focus.requestFocus(); }),\n",
+            """          ListTile(leading: const Icon(Icons.reply_rounded), title: const Text('Reply'), onTap: () { Navigator.pop(context); setState(() => replyingTo = message); focus.requestFocus(); }),\n          ListTile(leading: const Icon(Icons.copy_rounded), title: const Text('Copy'), onTap: () { Navigator.pop(context); _copyMessage(message['body']?.toString() ?? ''); }),\n          ListTile(leading: const Icon(Icons.share_rounded), title: const Text('Share'), onTap: () { Navigator.pop(context); _shareMessage(message); }),\n          ListTile(leading: const Icon(Icons.thumb_up_alt_outlined), title: const Text('Like'), onTap: () { Navigator.pop(context); _feedbackMessage(message['id'].toString(), 1); }),\n          ListTile(leading: const Icon(Icons.thumb_down_alt_outlined), title: const Text('Dislike'), onTap: () { Navigator.pop(context); _feedbackMessage(message['id'].toString(), -1); }),\n""")
+          replace('lib/chat_page.dart',
+            "                  IconButton(onPressed: toggleRecording, tooltip: recording ? 'Stop recording' : 'Voice message', icon: Icon(recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded), color: recording ? scheme.error : null),\n",
+            "                  IconButton(onPressed: _toggleDictation, tooltip: dictating ? 'Stop voice assistant' : 'Voice assistant', icon: Icon(dictating ? Icons.stop_circle_rounded : Icons.keyboard_voice_rounded), color: dictating ? scheme.error : null),\n                  IconButton(onPressed: toggleRecording, tooltip: recording ? 'Stop recording' : 'Voice message', icon: Icon(recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded), color: recording ? scheme.error : null),\n")
+          replace('lib/chat_page.dart',
+            "    recorder.dispose();\n",
+            "    speech.stop();\n    recorder.dispose();\n")
+
+          replace('lib/status_page.dart',
+            "  Future<void> _load() async {\n",
+            """  Future<void> _react(String reaction) async {\n    final id = widget.status['id']?.toString();\n    final user = Supabase.instance.client.auth.currentUser;\n    if (id == null || user == null) return;\n    try {\n      await Supabase.instance.client.from('status_reactions').upsert({\n        'status_id': id, 'user_id': user.id, 'reaction': reaction,\n      });\n      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reaction == 'like' ? 'Status liked' : 'Status disliked')));\n    } catch (_) {}\n  }\n\n  Future<void> _share() async {\n    final p = path;\n    if (p == null) return;\n    final u = await widget.signedUrl(p);\n    if (u != null) await Share.share(u);\n  }\n\n  Future<void> _load() async {\n""")
+          replace('lib/status_page.dart',
+            "import 'package:video_player/video_player.dart';\n",
+            "import 'package:video_player/video_player.dart';\nimport 'package:share_plus/share_plus.dart';\n")
+          replace('lib/status_page.dart',
+            "appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, title: const Text('Status')),",
+            """appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, title: const Text('Status'), actions: [\n          IconButton(tooltip: 'Like', onPressed: () => _react('like'), icon: const Icon(Icons.thumb_up_alt_outlined)),\n          IconButton(tooltip: 'Dislike', onPressed: () => _react('dislike'), icon: const Icon(Icons.thumb_down_alt_outlined)),\n          IconButton(tooltip: 'Share', onPressed: _share, icon: const Icon(Icons.share_rounded)),\n        ]),""")
+
+          replace('lib/gg_image_page.dart',
+            "import 'package:supabase_flutter/supabase_flutter.dart';\n",
+            "import 'package:supabase_flutter/supabase_flutter.dart';\nimport 'package:http/http.dart' as http;\nimport 'package:share_plus/share_plus.dart';\n")
+          replace('lib/gg_image_page.dart',
+            "  void _clear() {\n",
+            """  Future<void> _downloadImage() async {\n    final url = imageUrl;\n    if (url == null) return;\n    try {\n      final response = await http.get(Uri.parse(url));\n      if (response.statusCode >= 200 && response.statusCode < 300) {\n        await Share.shareXFiles([XFile.fromData(response.bodyBytes, mimeType: 'image/jpeg')], fileNameOverrides: const ['gg-generated-image.jpg'], text: 'Generated with GG AI');\n      } else {\n        await Share.share(url);\n      }\n    } catch (_) {\n      await Share.share(url);\n    }\n  }\n\n  void _clear() {\n""")
+          replace('lib/gg_image_page.dart',
+            "          if (imageUrl != null) ...[\n",
+            """          if (imageUrl != null) ...[\n""")
+          replace('lib/gg_image_page.dart',
+            "            const SizedBox(height: 8),\n            Text(\n",
+            """            const SizedBox(height: 10),\n            Row(children: [\n              Expanded(child: FilledButton.icon(onPressed: _downloadImage, icon: const Icon(Icons.download_rounded), label: const Text('Download / Share image'))),\n            ]),\n            const SizedBox(height: 8),\n            Text(\n""")
+
+          Path('.upgrade_marker').write_text('chat-ai-media-upgrade')
+      - name: Verify Flutter code
+        run: |
+          flutter pub get
+          dart format lib/chat_page.dart lib/status_page.dart lib/gg_ai_page.dart lib/gg_image_page.dart
+          flutter analyze --no-fatal-infos
+      - name: Commit upgrade
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pubspec.yaml lib/chat_page.dart lib/status_page.dart lib/gg_ai_page.dart lib/gg_image_page.dart .upgrade_marker
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: upgrade chat AI media voice and feedback [skip ci]'
+          git push
