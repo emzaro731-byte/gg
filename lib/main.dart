@@ -216,11 +216,36 @@ class ChatsPage extends StatelessWidget {
                 ]),
                 title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text((chat['last_message'] ?? 'Tap to open').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: chat['id'] == null ? const Icon(Icons.chevron_right) : UnreadBadge(conversationId: chat['id'].toString()),
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatPage(conversationId: chat['id'].toString(), title: title))),
               );
             },
           );
+        },
+      );
+}
+
+class UnreadBadge extends StatelessWidget {
+  const UnreadBadge({required this.conversationId, super.key});
+  final String conversationId;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<dynamic>(
+        future: Supabase.instance.client.rpc('get_unread_count', params: {'target_conversation_id': conversationId}),
+        builder: (context, snapshot) {
+          final count = int.tryParse('${snapshot.data ?? 0}') ?? 0;
+          if (count <= 0) return const Icon(Icons.chevron_right);
+          return Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
+              child: Text(count > 99 ? '99+' : '$count', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 11, fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.chevron_right),
+          ]);
         },
       );
 }
