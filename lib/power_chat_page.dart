@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'services/chat_power_service.dart';
 
@@ -15,6 +16,8 @@ class _PowerChatPageState extends State<PowerChatPage> {
   late final ChatPowerService power;
   String wallpaper = 'default';
   String disappearing = 'off';
+
+  SupabaseClient get supabase => Supabase.instance.client;
 
   @override
   void initState() {
@@ -55,8 +58,8 @@ class _PowerChatPageState extends State<PowerChatPage> {
     if (value == null) return;
     final seconds = value == '24h' ? 86400 : value == '7d' ? 604800 : 0;
     try {
+      await supabase.rpc('set_disappearing_messages', params: {'p_conversation_id': widget.conversationId, 'p_seconds': seconds});
       await power.setDisappearing(value);
-      await ChatPowerServiceRpc.setSeconds(widget.conversationId, seconds);
       if (mounted) setState(() => disappearing = value);
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update disappearing messages.')));
@@ -65,20 +68,25 @@ class _PowerChatPageState extends State<PowerChatPage> {
 
   Future<void> _pinned() async {
     try {
-      final rows = await ChatPowerServiceRpc.pinned(widget.conversationId);
+      final rows = await supabase.from('message_pins').select('message_id,pinned_at,messages(body,conversation_id)').order('pinned_at', ascending: false);
+      final filtered = (rows as List).where((r) {
+        final m = r['messages'];
+        return m is Map && m['conversation_id']?.toString() == widget.conversationId;
+      }).toList();
       if (!mounted) return;
       showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
         builder: (_) => SafeArea(
-          child: rows.isEmpty
+          child: filtered.isEmpty
               ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No pinned messages yet.')))
               : ListView.builder(
                   shrinkWrap: true,
-                  itemCount: rows.length,
+                  itemCount: filtered.length,
                   itemBuilder: (_, i) {
-                    final m = rows[i];
-                    return ListTile(leading: const Icon(Icons.push_pin_rounded), title: Text(m['body']?.toString() ?? 'Message'), subtitle: Text(m['pinned_at']?.toString() ?? ''));
+                    final m = filtered[i];
+                    final message = m['messages'];
+                    return ListTile(leading: const Icon(Icons.push_pin_rounded), title: Text(message is Map ? message['body']?.toString() ?? 'Message' : 'Message'), subtitle: Text(m['pinned_at']?.toString() ?? ''));
                   },
                 ),
         ),
@@ -121,23 +129,4 @@ class _PowerChatPageState extends State<PowerChatPage> {
       ],
     );
   }
-}
-
-class ChatPowerServiceRpc {
-  static final _client = ChatPowerServiceClient.client;
-  static Future<void> setSeconds(String conversationId, int seconds) async {
-    await _client.rpc('set_disappearing_messages', params: {'p_conversation_id': conversationId, 'p_seconds': seconds});
-  }
-
-  static Future<List<Map<String, dynamic>>> pinned(String conversationId) async {
-    final rows = await _client.from('message_pins').select('message_id,pinned_at,messages(body)').eq('conversation_id', conversationId).order('pinned_at', ascending: false);
-    return (rows as List).map((r) {
-      final message = r['messages'];
-      return {'body': message is Map ? message['body'] : 'Message', 'pinned_at': r['pinned_at']};
-    }).toList();
-  }
-}
-
-class ChatPowerServiceClient {
-  static dynamic get client => throw UnimplementedError('Use Supabase.instance.client');
 }
