@@ -57,7 +57,6 @@ jobs:
               else:
                   s += '\n\ndependencies {\n    ' + dep + '\n}\n'
           p.write_text(s)
-          print(f'Updated {p} for core library desugaring')
           PY
 
       - name: Configure Android permissions
@@ -84,6 +83,9 @@ jobs:
 
       - name: Install Flutter dependencies
         run: flutter pub get
+
+      - name: Apply premium chat UI
+        run: python3 tool/upgrade_chat_ui.py
 
       - name: Apply offline-first chat adapter
         run: |
