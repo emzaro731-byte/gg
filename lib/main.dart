@@ -108,11 +108,7 @@ class StartupErrorApp extends StatelessWidget {
     ),
   );
 
-  void _reload() {
-    // A full browser reload is intentionally avoided here so the error screen
-    // also works in Flutter's web-server test environment. The user can use
-    // the browser reload control after seeing the diagnostic.
-  }
+  void _reload() {}
 }
 
 class GGApp extends StatelessWidget {
@@ -166,12 +162,38 @@ class GGApp extends StatelessWidget {
   );
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool recoveringPassword = false;
+  late final Stream<AuthState> _authStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStream = Supabase.instance.client.auth.onAuthStateChange;
+  }
+
+  @override
   Widget build(BuildContext context) => StreamBuilder<AuthState>(
-    stream: Supabase.instance.client.auth.onAuthStateChange,
-    builder: (_, __) => Supabase.instance.client.auth.currentSession == null ? const email_auth.LoginPage() : const HomePage(),
+    stream: _authStream,
+    builder: (_, snapshot) {
+      final event = snapshot.data?.event;
+      if (event == AuthChangeEvent.passwordRecovery) {
+        recoveringPassword = true;
+      } else if (event == AuthChangeEvent.signedOut) {
+        recoveringPassword = false;
+      }
+
+      if (recoveringPassword) return const email_auth.PasswordRecoveryPage();
+      return Supabase.instance.client.auth.currentSession == null
+          ? const email_auth.LoginPage()
+          : const HomePage();
+    },
   );
 }
 
