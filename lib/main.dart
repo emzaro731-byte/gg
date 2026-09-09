@@ -1,7 +1,9 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'new_chat_page.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -9,6 +11,18 @@ Future<void> main() async {
   const key = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   if (url.isEmpty || key.isEmpty) { runApp(const MissingConfigApp()); return; }
   await Supabase.initialize(url: url, publishableKey: key);
+
+  // Firebase uses the native Android configuration when google-services.json
+  // is present. This keeps local development working even before Firebase is configured.
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
+    await NotificationService.instance.initialize();
+  } catch (_) {
+    // Firebase is optional until google-services.json is supplied.
+  }
+
   runApp(const GGApp());
 }
 
