@@ -17,20 +17,19 @@ class _ChatPageState extends State<ChatPage> {
   Map<String, dynamic>? replyingTo;
   String? editingId;
   late final RealtimeChannel presenceChannel;
-  Stream<List<Map<String, dynamic>>>? _messageStream;
-
+  late final Stream<List<Map<String, dynamic>>> messageStream;
   SupabaseClient get supabase => Supabase.instance.client;
   String get userId => supabase.auth.currentUser!.id;
 
   @override
   void initState() {
     super.initState();
-    _messageStream = supabase.from('messages').stream(primaryKey: ['id']).eq('conversation_id', widget.conversationId).order('created_at');
-    presenceChannel = supabase.channel('chat-presence:${widget.conversationId}', opts: const RealtimeChannelConfig(presence: PresenceConfig()));
+    messageStream = supabase.from('messages').stream(primaryKey: ['id']).eq('conversation_id', widget.conversationId).order('created_at');
+    presenceChannel = supabase.channel('chat-presence:${widget.conversationId}');
     presenceChannel.onPresenceSync((_) => _refreshPresence());
     presenceChannel.onPresenceJoin((_) => _refreshPresence());
     presenceChannel.onPresenceLeave((_) => _refreshPresence());
-    presenceChannel.subscribe((status, error) async {
+    presenceChannel.subscribe((status, _) async {
       if (status == RealtimeSubscribeStatus.subscribed) {
         await presenceChannel.track({'user_id': userId, 'online_at': DateTime.now().toUtc().toIso8601String()});
         _refreshPresence();
@@ -41,10 +40,7 @@ class _ChatPageState extends State<ChatPage> {
   void _refreshPresence() {
     if (!mounted) return;
     final states = presenceChannel.presenceState();
-    final found = states.values.expand((items) => items).any((item) {
-      final data = Map<String, dynamic>.from(item as Map);
-      return data['user_id']?.toString() != userId;
-    });
+    final found = states.any((state) => state.presences.any((presence) => presence.payload['user_id']?.toString() != userId));
     setState(() => online = found);
   }
 
@@ -62,9 +58,8 @@ class _ChatPageState extends State<ChatPage> {
       } else {
         await supabase.from('messages').insert({'conversation_id': widget.conversationId, 'sender_id': userId, 'body': text, 'message_type': 'text', 'reply_to': reply?['id']});
       }
-    } on PostgrestException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally { if (mounted) setState(() => sending = false); }
+    } on PostgrestException catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message))); }
+    finally { if (mounted) setState(() => sending = false); }
   }
 
   Future<void> deleteMessage(String id) async {
@@ -83,10 +78,6 @@ class _ChatPageState extends State<ChatPage> {
     } on PostgrestException catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Run the messaging migration first: ${e.message}'))); }
   }
 
-  Future<void> markRead(String id) async {
-    try { await supabase.from('message_reads').upsert({'message_id': id, 'user_id': userId, 'read_at': DateTime.now().toUtc().toIso8601String()}); } catch (_) {}
-  }
-
   void showMessageActions(Map<String, dynamic> message) {
     final mine = message['sender_id'] == userId;
     showModalBottomSheet(context: context, showDragHandle: true, builder: (_) => SafeArea(child: Wrap(children: [
@@ -99,10 +90,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   @override
-  void dispose() {
-    unawaited(presenceChannel.unsubscribe());
-    controller.dispose(); focus.dispose(); super.dispose();
-  }
+  void dispose() { unawaited(presenceChannel.unsubscribe()); controller.dispose(); focus.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -112,13 +100,12 @@ class _ChatPageState extends State<ChatPage> {
       actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.call_outlined)), IconButton(onPressed: () {}, icon: const Icon(Icons.videocam_outlined))],
     ),
     body: Column(children: [
-      Expanded(child: StreamBuilder<List<Map<String, dynamic>>>(stream: _messageStream, builder: (context, snapshot) {
+      Expanded(child: StreamBuilder<List<Map<String, dynamic>>>(stream: messageStream, builder: (context, snapshot) {
         if (snapshot.hasError) return Center(child: Text('Unable to load messages: ${snapshot.error}'));
         final items = snapshot.data ?? [];
         if (items.isEmpty) return const Center(child: Text('No messages yet. Say hello!'));
-        return ListView.builder(reverse: false, padding: const EdgeInsets.fromLTRB(12, 16, 12, 16), itemCount: items.length, itemBuilder: (context, index) {
+        return ListView.builder(padding: const EdgeInsets.fromLTRB(12, 16, 12, 16), itemCount: items.length, itemBuilder: (context, index) {
           final message = items[index]; final mine = message['sender_id'] == userId; final body = message['body']?.toString() ?? ''; final created = DateTime.tryParse(message['created_at']?.toString() ?? '')?.toLocal();
-          if (!mine) markRead(message['id'].toString());
           final replyId = message['reply_to']?.toString(); final replied = replyId == null ? null : items.cast<Map<String, dynamic>?>().firstWhere((m) => m?['id']?.toString() == replyId, orElse: () => null);
           return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: GestureDetector(onLongPress: () => showMessageActions(message), child: Container(
             constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .80), margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.fromLTRB(14, 10, 12, 8),
