@@ -53,6 +53,9 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Upgrade premium interface
+        run: python3 tool/upgrade_interface.py
+
       - name: Apply email password + OTP authentication
         run: python3 tool/apply_phone_otp_auth.py
 
