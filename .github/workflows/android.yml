@@ -1,128 +1,50 @@
 name: GG Messenger Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
       - android-app
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-android:
+    name: Build GG Messenger APK
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.2'
           channel: stable
+          flutter-version: '3.47.2'
           cache: true
 
-      - name: Prepare Android project
+      - name: Create Android platform
         run: flutter create --platforms=android --project-name gg_messenger .
 
-      - name: Configure Android permissions
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          permissions = [
-              'android.permission.INTERNET',
-              'android.permission.ACCESS_NETWORK_STATE',
-              'android.permission.CAMERA',
-              'android.permission.RECORD_AUDIO',
-              'android.permission.MODIFY_AUDIO_SETTINGS',
-              'android.permission.VIBRATE',
-              'android.permission.POST_NOTIFICATIONS',
-              'android.permission.READ_MEDIA_IMAGES',
-              'android.permission.READ_MEDIA_VIDEO',
-          ]
-          additions = [f'    <uses-permission android:name="{x}"/>' for x in permissions if x not in s]
-          if additions:
-              i = s.find('>', s.find('<manifest'))
-              s = s[:i+1] + '\n' + '\n'.join(additions) + s[i+1:]
-              p.write_text(s)
-          PY
-
-      - name: Enable core library desugaring
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('android/app/build.gradle')
-          s = p.read_text()
-          if 'coreLibraryDesugaringEnabled true' not in s:
-              if 'compileOptions {' in s:
-                  s = s.replace('compileOptions {', 'compileOptions {\n        coreLibraryDesugaringEnabled true', 1)
-              else:
-                  s += '\nandroid {\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\n'
-          if 'desugar_jdk_libs' not in s:
-              dep = "\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'\n"
-              if 'dependencies {' in s:
-                  s = s.replace('dependencies {', 'dependencies {' + dep, 1)
-              else:
-                  s += '\ndependencies {' + dep + '}\n'
-          p.write_text(s)
-          PY
-
-      - name: Verify exact GG logo
-        run: |
-          if [ ! -f 'assets/images/gg_logo.png' ]; then
-            echo 'ERROR: assets/images/gg_logo.png is missing.'
-            echo 'Upload the approved GG logo PNG before building.'
-            exit 1
-          fi
-          file assets/images/gg_logo.png
-
-      - name: Flutter pub get
+      - name: Get dependencies
         run: flutter pub get
 
-      - name: Generate GG launcher icon
-        run: dart run flutter_launcher_icons
+      - name: Verify logo
+        run: test -f assets/images/gg_logo.png
 
-      - name: Apply premium chat UI
-        run: |
-          if [ -f 'tool/upgrade_chat_ui.py' ]; then python3 tool/upgrade_chat_ui.py; fi
-
-      - name: Apply offline-first chat adapter
-        run: |
-          if [ -f 'lib/chat_page.dart' ] && [ -f 'lib/offline_first_chat_page.dart' ]; then
-            cp lib/chat_page.dart lib/realtime_chat_page.dart
-            cp lib/offline_first_chat_page.dart lib/chat_page.dart
-          fi
-
-      - name: Repair Dart syntax
-        run: |
-          if [ -f 'tool/repair_dart_syntax.py' ]; then python3 tool/repair_dart_syntax.py; fi
-
-      - name: Format Dart
-        run: dart format lib
-
-      - name: Remove default test
-        run: rm -f test/widget_test.dart
-
-      - name: Flutter analyze
+      - name: Analyze
         run: flutter analyze --no-fatal-infos
 
-      - name: Build release APK
+      - name: Build APK
         run: flutter build apk --release
 
-      - name: Rename APK
-        run: |
-          mkdir -p build/releases
-          cp build/app/outputs/flutter-apk/app-release.apk build/releases/GG-Messenger-release.apk
-          ls -lh build/releases/GG-Messenger-release.apk
-
-      - name: Upload APK artifact
+      - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
           name: GG-Messenger-APK
-          path: build/releases/GG-Messenger-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
