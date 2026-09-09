@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'new_chat_page.dart';
 import 'calls_page.dart';
+import 'status_page.dart';
 import 'services/presence_service.dart';
 
 Future<void> main() async {
@@ -88,7 +89,7 @@ class _HomePageState extends State<HomePage> {
   @override void initState() { super.initState(); presence = PresenceService(Supabase.instance.client); presence.onlineUsers.listen((users) { if (mounted) setState(() => onlineUsers = users); }); presence.start(); }
   @override void dispose() { presence.dispose(); super.dispose(); }
   @override Widget build(BuildContext context) {
-    final pages = [ChatsPage(onlineUsers: onlineUsers), const PlaceholderPage(title: 'Updates', icon: Icons.circle_outlined), const CallsPage()];
+    final pages = [ChatsPage(onlineUsers: onlineUsers), const StatusPage(), const CallsPage()];
     return Scaffold(
       appBar: AppBar(title: Row(mainAxisSize: MainAxisSize.min, children: [const Text('GG', style: TextStyle(fontWeight: FontWeight.w800)), const SizedBox(width: 8), Container(width: 9, height: 9, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.green.withOpacity(.35), blurRadius: 6)]))]),
       actions: [IconButton(tooltip: 'Search', onPressed: () => showSearch(context: context, delegate: _AppSearchDelegate()), icon: const Icon(Icons.search_rounded)), PopupMenuButton<String>(onSelected: (v) async { if (v == 'settings') { if (!mounted) return; Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())); } else if (v == 'logout') { await Supabase.instance.client.auth.signOut(); } }, itemBuilder: (_) => const [PopupMenuItem(value: 'settings', child: Text('Settings')), PopupMenuItem(value: 'logout', child: Text('Log out'))])],
