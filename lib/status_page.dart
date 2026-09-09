@@ -53,7 +53,7 @@ class _StatusPageState extends State<StatusPage> {
     final file = result?.files.single;
     final bytes = file?.bytes;
     if (file == null || bytes == null) return;
-    final extension = file!.extension?.toLowerCase() ?? '';
+    final extension = file.extension?.toLowerCase() ?? '';
     final isVideo = ['mp4', 'mov', 'm4v', 'webm'].contains(extension);
     final type = isVideo ? 'video' : 'image';
     final contentType = _contentType(extension, isVideo);
