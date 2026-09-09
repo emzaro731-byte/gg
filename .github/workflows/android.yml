@@ -22,6 +22,11 @@ jobs:
       - name: Generate Android project
         run: flutter create --platforms=android --project-name gg_messenger .
 
+      - name: Remove generated demo test and lint config
+        run: |
+          rm -f test/widget_test.dart
+          rm -f analysis_options.yaml
+
       - name: Configure Android permissions
         shell: bash
         run: |
