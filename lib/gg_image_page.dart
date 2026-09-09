@@ -189,7 +189,7 @@ class _GgImagePageState extends State<GgImagePage> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: model,
+                  initialValue: model,
                   decoration: InputDecoration(
                     labelText: 'Model',
                     filled: true,
@@ -224,7 +224,7 @@ class _GgImagePageState extends State<GgImagePage> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: aspectRatio,
+                  initialValue: aspectRatio,
                   decoration: InputDecoration(
                     labelText: 'Ratio',
                     filled: true,
