@@ -141,191 +141,265 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final email = TextEditingController();
-  final password = TextEditingController();
-  bool signUp = false;
+  final phoneController = TextEditingController();
+  final otpController = TextEditingController();
+  bool codeSent = false;
   bool loading = false;
-  bool obscure = true;
+  bool resending = false;
   String? error;
+  String? notice;
 
-  Future<void> submit() async {
-    if (!email.text.trim().contains('@') || password.text.length < 6) {
-      setState(() => error = 'Enter a valid email and a password of at least 6 characters.');
+  String get phone => phoneController.text.trim();
+  String get otp => otpController.text.trim();
+
+  bool _validPhone(String value) {
+    final normalized = value.replaceAll(RegExp(r'[\s\-()]'), '');
+    return RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(normalized);
+  }
+
+  Future<void> sendCode() async {
+    final value = phone.replaceAll(RegExp(r'[\s\-()]'), '');
+    if (!_validPhone(value)) {
+      setState(() {
+        error = 'Enter your full international number, e.g. +2348012345678';
+        notice = null;
+      });
       return;
     }
+
     setState(() {
       loading = true;
       error = null;
+      notice = null;
     });
+
     try {
-      final auth = Supabase.instance.client.auth;
-      if (signUp) {
-        final result = await auth.signUp(
-          email: email.text.trim(),
-          password: password.text,
-          data: {'display_name': email.text.trim().split('@').first},
-        );
-        if (result.session == null && mounted) {
-          setState(() => error = 'Check your email to confirm your account.');
-        }
-      } else {
-        await auth.signInWithPassword(
-          email: email.text.trim(),
-          password: password.text,
-        );
-      }
+      await Supabase.instance.client.auth.signInWithOtp(
+        phone: value,
+        shouldCreateUser: true,
+      );
+      if (!mounted) return;
+      setState(() {
+        codeSent = true;
+        notice = 'We sent a one-time code to $value.';
+      });
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
     } catch (_) {
-      if (mounted) setState(() => error = 'Something went wrong. Please try again.');
+      if (mounted) setState(() => error = 'Could not send the code. Please try again.');
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
-  Future<void> resetPassword() async {
-    final value = email.text.trim();
-    if (!value.contains('@')) {
-      setState(() => error = 'Enter your email first.');
+  Future<void> verifyCode() async {
+    final value = phone.replaceAll(RegExp(r'[\s\-()]'), '');
+    if (!_validPhone(value)) {
+      setState(() => error = 'Enter a valid international phone number.');
       return;
     }
-    setState(() => loading = true);
+    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+      setState(() => error = 'Enter the 6-digit code from your SMS.');
+      return;
+    }
+
+    setState(() {
+      loading = true;
+      error = null;
+      notice = null;
+    });
+
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(value);
-      if (mounted) setState(() => error = 'Password reset email sent.');
+      await Supabase.instance.client.auth.verifyOTP(
+        phone: value,
+        token: otp,
+        type: OtpType.sms,
+      );
+      // AuthGate listens for the authenticated session and opens HomePage.
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => error = 'The code could not be verified. Please try again.');
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  Future<void> resendCode() async {
+    if (loading || resending) return;
+    final value = phone.replaceAll(RegExp(r'[\s\-()]'), '');
+    if (!_validPhone(value)) return;
+
+    setState(() {
+      resending = true;
+      error = null;
+      notice = null;
+    });
+
+    try {
+      await Supabase.instance.client.auth.signInWithOtp(
+        phone: value,
+        shouldCreateUser: true,
+      );
+      if (mounted) setState(() => notice = 'A new one-time code was sent.');
+    } on AuthException catch (e) {
+      if (mounted) setState(() => error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => error = 'Could not resend the code.');
+    } finally {
+      if (mounted) setState(() => resending = false);
+    }
+  }
+
+  void changeNumber() {
+    setState(() {
+      codeSent = false;
+      otpController.clear();
+      error = null;
+      notice = null;
+    });
   }
 
   @override
   void dispose() {
-    email.dispose();
-    password.dispose();
+    phoneController.dispose();
+    otpController.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 430),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Theme.of(context).colorScheme.primary,
-                            Theme.of(context).colorScheme.tertiary,
-                          ],
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [scheme.primary, scheme.tertiary],
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.forum_rounded, size: 54, color: scheme.onPrimary),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'GG Messenger',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.6,
                         ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.forum_rounded,
-                        size: 54,
-                        color: Theme.of(context).colorScheme.onPrimary,
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    codeSent
+                        ? 'Enter the one-time code we sent you'
+                        : 'Sign in or create an account with your phone',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+                  TextField(
+                    controller: phoneController,
+                    enabled: !codeSent && !loading,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number',
+                      hintText: '+234 801 234 5678',
+                      prefixIcon: Icon(Icons.phone_rounded),
                     ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'GG Messenger',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.6,
-                          ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      signUp
-                          ? 'Create your account'
-                          : 'Private, fast and realtime messaging',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 30),
-                    TextField(
-                      controller: email,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
-                      ),
-                    ),
+                    onSubmitted: (_) => !codeSent && !loading ? sendCode() : null,
+                  ),
+                  if (codeSent) ...[
                     const SizedBox(height: 12),
                     TextField(
-                      controller: password,
-                      obscureText: obscure,
-                      onSubmitted: (_) => loading ? null : submit(),
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          onPressed: () => setState(() => obscure = !obscure),
-                          icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
-                        ),
-                      ),
-                    ),
-                    if (!signUp)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: loading ? null : resetPassword,
-                          child: const Text('Forgot password?'),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    if (error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          error!,
-                          style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: FilledButton.icon(
-                        onPressed: loading ? null : submit,
-                        icon: const Icon(Icons.arrow_forward_rounded),
-                        label: Text(
-                          loading
-                              ? 'Please wait...'
-                              : signUp
-                                  ? 'Create account'
-                                  : 'Sign in',
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: loading
-                          ? null
-                          : () => setState(() {
-                                signUp = !signUp;
-                                error = null;
-                              }),
-                      child: Text(
-                        signUp
-                            ? 'Already have an account? Sign in'
-                            : 'New here? Create an account',
+                      controller: otpController,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      maxLength: 6,
+                      autofocus: true,
+                      onSubmitted: (_) => loading ? null : verifyCode(),
+                      decoration: const InputDecoration(
+                        labelText: '6-digit OTP',
+                        hintText: '123456',
+                        prefixIcon: Icon(Icons.verified_user_rounded),
+                        counterText: '',
                       ),
                     ),
                   ],
-                ),
+                  const SizedBox(height: 14),
+                  if (notice != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        notice!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: scheme.error),
+                      ),
+                    ),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: FilledButton.icon(
+                      onPressed: loading ? null : (codeSent ? verifyCode : sendCode),
+                      icon: Icon(codeSent ? Icons.verified_rounded : Icons.sms_rounded),
+                      label: Text(
+                        loading
+                            ? 'Please wait...'
+                            : codeSent
+                                ? 'Verify & continue'
+                                : 'Send OTP',
+                      ),
+                    ),
+                  ),
+                  if (codeSent) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: loading || resending ? null : resendCode,
+                          child: Text(resending ? 'Sending...' : 'Resend code'),
+                        ),
+                        const Text(' • '),
+                        TextButton(
+                          onPressed: loading ? null : changeNumber,
+                          child: const Text('Change number'),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'No password required. Your phone number is verified with a one-time code.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class HomePage extends StatefulWidget {
