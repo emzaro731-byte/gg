@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_config.dart';
 import 'calls_page.dart';
-import 'chat_page.dart';
 import 'new_chat_page.dart';
 import 'profile_page.dart';
 import 'search_page.dart';
@@ -58,7 +57,7 @@ class GGApp extends StatelessWidget {
       navigationBarTheme: NavigationBarThemeData(
         height: 76,
         elevation: 0,
-        backgroundColor: dark ? const Color(0xFF111016) : Colors.white.withOpacity(.96),
+        backgroundColor: dark ? const Color(0xFF111016) : Colors.white.withValues(alpha: .96),
         indicatorColor: scheme.primaryContainer,
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
       ),
