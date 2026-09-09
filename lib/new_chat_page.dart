@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'group_chat_page.dart';
+import 'group_manage_page.dart';
 
 class NewChatPage extends StatefulWidget {
   const NewChatPage({super.key, this.initialUserId});
@@ -20,9 +21,7 @@ class _NewChatPageState extends State<NewChatPage> {
   void initState() {
     super.initState();
     final id = widget.initialUserId;
-    if (id != null && id.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => openInitialUser(id));
-    }
+    if (id != null && id.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => openInitialUser(id));
   }
 
   Future<void> openInitialUser(String id) async {
@@ -32,9 +31,7 @@ class _NewChatPageState extends State<NewChatPage> {
       if (row != null && mounted) await startChat(Map<String, dynamic>.from(row));
     } on PostgrestException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
+    } finally { if (mounted) setState(() => loading = false); }
   }
 
   Future<void> findUsers(String value) async {
@@ -58,6 +55,10 @@ class _NewChatPageState extends State<NewChatPage> {
     } finally { if (mounted) setState(() => loading = false); }
   }
 
+  Future<void> openGroups() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupListPage()));
+  }
+
   @override void dispose() { search.dispose(); super.dispose(); }
 
   @override
@@ -65,11 +66,8 @@ class _NewChatPageState extends State<NewChatPage> {
     appBar: AppBar(
       title: const Text('New chat'),
       actions: [
-        IconButton(
-          tooltip: 'New group',
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupChatPage())),
-          icon: const Icon(Icons.groups_rounded),
-        ),
+        IconButton(tooltip: 'My groups', onPressed: openGroups, icon: const Icon(Icons.manage_accounts_outlined)),
+        IconButton(tooltip: 'New group', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupChatPage())), icon: const Icon(Icons.groups_rounded)),
       ],
     ),
     body: Column(children: [
@@ -79,5 +77,45 @@ class _NewChatPageState extends State<NewChatPage> {
         return ListTile(leading: CircleAvatar(child: Text(initial)), title: Text(name), subtitle: Text(user['username']?.toString().isNotEmpty == true ? '@${user['username']}' : 'GG Messenger user'), onTap: () => startChat(user));
       }))
     ]),
+  );
+}
+
+class GroupListPage extends StatefulWidget {
+  const GroupListPage({super.key});
+  @override State<GroupListPage> createState() => _GroupListPageState();
+}
+
+class _GroupListPageState extends State<GroupListPage> {
+  final supabase = Supabase.instance.client;
+
+  Stream<List<Map<String, dynamic>>> groups() => supabase.from('conversations').stream(primaryKey: ['id']).eq('is_group', true).order('updated_at', ascending: false);
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('My groups')),
+    body: StreamBuilder<List<Map<String, dynamic>>>(
+      stream: groups(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('Unable to load groups: ${snapshot.error}'));
+        final rows = snapshot.data ?? [];
+        if (rows.isEmpty) return const Center(child: Text('No groups yet. Create one from New chat.'));
+        return ListView.separated(
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (_, i) {
+            final row = rows[i];
+            final id = row['id'].toString();
+            final title = row['title']?.toString() ?? 'Group';
+            return ListTile(
+              leading: CircleAvatar(child: Text(title.isEmpty ? '?' : title[0].toUpperCase())),
+              title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Open group management'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GroupManagePage(conversationId: id, title: title))),
+            );
+          },
+        );
+      },
+    ),
   );
 }
