@@ -1,4 +1,4 @@
-name: Build GG Messenger Android
+name: Build GG Messenger APK
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,15 +22,10 @@ jobs:
           flutter-version: '3.47.2'
           cache: true
 
-      - name: Generate Android project
+      - name: Generate Android project only
         run: flutter create --platforms=android --project-name gg_messenger .
 
-      - name: Remove generated demo test and lint config
-        run: |
-          rm -f test/widget_test.dart
-          rm -f analysis_options.yaml
-
-      - name: Configure Android network and media permissions
+      - name: Configure Android permissions
         shell: bash
         run: |
           python3 - <<'PY'
@@ -52,34 +47,26 @@ jobs:
           manifest.write_text(s)
           PY
 
-      - name: Get dependencies
+      - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Apply hybrid offline-first chat adapter
+      - name: Apply offline-first chat adapter
         run: |
           cp lib/chat_page.dart lib/realtime_chat_page.dart
           cp lib/offline_first_chat_page.dart lib/chat_page.dart
 
-      - name: Get dependencies
-        run: flutter pub get
-
       - name: Format Dart sources
         run: dart format lib
 
-      - name: Analyze Flutter app
+      - name: Analyze Android app
         run: flutter analyze --no-fatal-infos
 
-      - name: Build release APK
+      - name: Build APK only
         run: flutter build apk --release
 
-      - name: Build release App Bundle
-        run: flutter build appbundle --release
-
-      - name: Upload Android artifacts
+      - name: Upload APK only
         uses: actions/upload-artifact@v4
         with:
-          name: gg-messenger-android-${{ github.run_number }}
+          name: gg-messenger-apk-${{ github.run_number }}
           if-no-files-found: error
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          path: build/app/outputs/flutter-apk/app-release.apk
