@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'chat_page.dart';
+import 'gg_ai_page.dart';
 import 'new_chat_page.dart';
 
 class PremiumChatsPage extends StatefulWidget {
@@ -58,7 +59,6 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
       if (!mounted) return;
       setState(() => usernameResults = List<Map<String, dynamic>>.from(rows as List));
     } on PostgrestException catch (_) {
-      // Fallback for projects where the RPC has not been applied yet.
       try {
         final rows = await supabase
             .from('profiles')
@@ -128,6 +128,10 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
     } catch (_) {}
   }
 
+  void _openAi() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const GgAiPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
@@ -169,8 +173,40 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
                   ),
                 ),
               ),
-              if (query.length >= 2 && (searchingUsers || usernameResults.isNotEmpty))
-                _usernameSearchPanel(query),
+              if (query.length >= 2 && (searchingUsers || usernameResults.isNotEmpty)) _usernameSearchPanel(query),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(22),
+                    onTap: _openAi,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: .55),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .18)),
+                      ),
+                      child: Row(children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
+                          child: Icon(Icons.auto_awesome_rounded, color: Theme.of(context).colorScheme.onPrimary),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('GG AI', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                          SizedBox(height: 2),
+                          Text('Ask anything • Powered by Groq', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ])),
+                        Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.primary),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
               SizedBox(
                 height: 42,
                 child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), children: [
@@ -234,7 +270,7 @@ class _PremiumChatsPageState extends State<PremiumChatsPage> {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(.35)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .35)),
       ),
       child: searchingUsers
           ? const Padding(padding: EdgeInsets.all(18), child: Row(children: [SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Finding usernames…')]))
@@ -288,10 +324,10 @@ class _GlassChatTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: scheme.surface.withOpacity(.58),
+        color: scheme.surface.withValues(alpha: .58),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(.25)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.04), blurRadius: 18, offset: const Offset(0, 5))],
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .25)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .04), blurRadius: 18, offset: const Offset(0, 5))],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
