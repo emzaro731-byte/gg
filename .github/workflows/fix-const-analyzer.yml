@@ -1,0 +1,47 @@
+name: Fix const analyzer errors
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Remove invalid const wrappers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for name in ('lib/chat_page.dart', 'lib/gg_ai_page.dart'):
+              p = Path(name)
+              text = p.read_text()
+              text = text.replace("const Padding(\n            padding: EdgeInsets.fromLTRB(20, 0, 20, 6),", "Padding(\n            padding: EdgeInsets.fromLTRB(20, 0, 20, 6),")
+              text = text.replace("const Padding(\n            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),", "Padding(\n            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),")
+              p.write_text(text)
+          PY
+      - name: Format and analyze
+        run: |
+          flutter pub get
+          dart format lib/chat_page.dart lib/gg_ai_page.dart
+          flutter analyze --no-fatal-infos
+      - name: Commit fix
+        run: |
+          if git diff --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/chat_page.dart lib/gg_ai_page.dart
+          git commit -m 'fix: remove invalid const wrappers'
+          git push
