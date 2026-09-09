@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -52,19 +52,6 @@ jobs:
               s = s.replace(marker, marker + permissions)
           p.write_text(s)
           PY
-
-      - name: Apply passwordless phone OTP authentication
-        run: python3 tool/apply_phone_otp_auth.py
-
-      - name: Persist generated auth upgrade to main.dart
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/main.dart
-          if ! git diff --cached --quiet; then
-            git commit -m "Upgrade to passwordless phone OTP auth [skip ci]"
-            git push
-          fi
 
       - name: Get dependencies
         run: flutter pub get
