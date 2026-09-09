@@ -1,4 +1,4 @@
-name: Build GG Messenger Offline Android
+name: Build GG Messenger Android
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
           rm -f test/widget_test.dart
           rm -f analysis_options.yaml
 
-      - name: Configure offline Android permissions
+      - name: Configure Android network and media permissions
         shell: bash
         run: |
           python3 - <<'PY'
@@ -41,12 +41,13 @@ jobs:
           permissions = '''\
               <uses-feature android:name="android.hardware.camera" />
               <uses-feature android:name="android.hardware.camera.autofocus" />
+              <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.CAMERA" />
               <uses-permission android:name="android.permission.RECORD_AUDIO" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.VIBRATE" />
           '''
-          if 'android.permission.CAMERA' not in s:
+          if 'android.permission.INTERNET' not in s:
               s = s.replace(marker, marker + permissions)
           manifest.write_text(s)
           PY
@@ -54,11 +55,11 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Format offline app
-        run: dart format lib/main.dart
+      - name: Format Dart sources
+        run: dart format lib
 
-      - name: Analyze offline app
-        run: flutter analyze --no-fatal-infos lib/main.dart
+      - name: Analyze Flutter app
+        run: flutter analyze --no-fatal-infos
 
       - name: Build release APK
         run: flutter build apk --release
@@ -69,7 +70,7 @@ jobs:
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gg-messenger-offline-android-${{ github.run_number }}
+          name: gg-messenger-android-${{ github.run_number }}
           if-no-files-found: error
           path: |
             build/app/outputs/flutter-apk/app-release.apk
