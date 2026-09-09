@@ -23,25 +23,43 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Remove invalid const constructor calls
+      - name: Remove invalid const constructor calls and unused chat helpers
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           replacements = {
               'const Padding(': 'Padding(',
               'const Align(': 'Align(',
               'const stt.SpeechListenOptions(': 'stt.SpeechListenOptions(',
               'const EdgeInsets.fromLTRB(14, 10, 11, 7)': 'EdgeInsets.fromLTRB(14, 10, 11, 7)',
           }
+
           for filename in ('lib/chat_page.dart', 'lib/gg_ai_page.dart'):
               path = Path(filename)
               text = path.read_text()
               original = text
               for old, new in replacements.items():
                   text = text.replace(old, new)
+
+              if filename == 'lib/chat_page.dart':
+                  text = re.sub(
+                      r'\n  String _dayLabel\(DateTime date\) \{.*?\n  \}\n',
+                      '\n',
+                      text,
+                      flags=re.S,
+                  )
+                  text = re.sub(
+                      r'\n  Widget _dayPill\(String label\) => Padding\(.*?\n  Widget _messageBubble',
+                      '\n  Widget _messageBubble',
+                      text,
+                      flags=re.S,
+                  )
+
               if text != original:
                   path.write_text(text)
-                  print(f'Fixed const constructors in {filename}')
+                  print(f'Updated {filename}')
           PY
 
       - name: Apply remaining Dart analyzer fixes
@@ -62,5 +80,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add lib/chat_page.dart lib/gg_ai_page.dart lib/status_page.dart lib/gg_image_page.dart
-          git commit -m 'fix: remove remaining non-const constructor invocations'
+          git commit -m 'fix: resolve remaining analyzer issues'
           git push
