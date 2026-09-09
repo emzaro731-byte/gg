@@ -29,6 +29,13 @@ class _GgImagePageState extends State<GgImagePage> {
     final prompt = promptController.text.trim();
     if (prompt.isEmpty || generating) return;
 
+    final session = supabase.auth.currentSession;
+    if (session == null) {
+      setState(() => error = 'Please sign in to GG before generating an image.');
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
     setState(() {
       generating = true;
       error = null;
@@ -44,38 +51,80 @@ class _GgImagePageState extends State<GgImagePage> {
           'model': model,
           'aspect_ratio': aspectRatio,
           'resolution': '640px',
+          'image_count': 1,
         },
       );
+
       final data = response.data;
-      if (data is! Map) throw Exception('Invalid image service response.');
+      if (data is! Map) {
+        throw Exception('Invalid response from GG Image.');
+      }
+
+      final returnedError = data['error']?.toString();
       final url = data['image_url']?.toString();
-      if (url == null || url.isEmpty) throw Exception(data['error']?.toString() ?? 'No image was returned.');
+
+      if (url == null || url.isEmpty) {
+        throw Exception(returnedError ?? 'Magic Hour did not return an image.');
+      }
+
       if (!mounted) return;
       setState(() {
         imageUrl = url;
-        creditsCharged = int.tryParse(data['credits_charged']?.toString() ?? '');
+        creditsCharged = int.tryParse(
+          data['credits_charged']?.toString() ?? '',
+        );
       });
     } on FunctionException catch (e) {
       if (!mounted) return;
-      setState(() => error = e.details?.toString() ?? e.reasonPhrase ?? 'Magic Hour request failed.');
+      final details = e.details;
+      String message = 'Magic Hour request failed.';
+      if (details is Map && details['error'] != null) {
+        message = details['error'].toString();
+      } else if (details != null) {
+        message = details.toString();
+      } else if (e.reasonPhrase != null && e.reasonPhrase!.isNotEmpty) {
+        message = e.reasonPhrase!;
+      }
+      setState(() => error = message);
     } catch (e) {
       if (!mounted) return;
-      setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      setState(() {
+        error = e.toString().replaceFirst('Exception: ', '');
+      });
     } finally {
       if (mounted) setState(() => generating = false);
     }
   }
 
+  void _clear() {
+    if (generating) return;
+    setState(() {
+      promptController.clear();
+      imageUrl = null;
+      error = null;
+      creditsCharged = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final imageAspect = aspectRatio == '16:9'
+        ? 16 / 9
+        : aspectRatio == '9:16'
+            ? 9 / 16
+            : 1.0;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GG Image', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'GG Image',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         actions: [
           IconButton(
             tooltip: 'Clear',
-            onPressed: generating ? null : () => setState(() { promptController.clear(); imageUrl = null; error = null; }),
+            onPressed: generating ? null : _clear,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -86,16 +135,32 @@ class _GgImagePageState extends State<GgImagePage> {
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [scheme.primaryContainer, scheme.secondaryContainer]),
+              gradient: LinearGradient(
+                colors: [
+                  scheme.primaryContainer,
+                  scheme.secondaryContainer,
+                ],
+              ),
               borderRadius: BorderRadius.circular(28),
             ),
-            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.auto_awesome_rounded, size: 34),
-              SizedBox(height: 10),
-              Text('Create with GG', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-              SizedBox(height: 4),
-              Text('Describe an image and Magic Hour will generate it for you.'),
-            ]),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.auto_awesome_rounded, size: 34),
+                SizedBox(height: 10),
+                Text(
+                  'Create with GG',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Describe an image and Magic Hour will generate it for you.',
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 18),
           TextField(
@@ -105,55 +170,178 @@ class _GgImagePageState extends State<GgImagePage> {
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
               labelText: 'Image prompt',
-              hintText: 'A futuristic Port Harcourt skyline at sunset, cinematic lighting…',
+              hintText:
+                  'A futuristic Port Harcourt skyline at sunset, cinematic lighting…',
               alignLabelWithHint: true,
-              prefixIcon: const Padding(padding: EdgeInsets.only(bottom: 58), child: Icon(Icons.edit_rounded)),
+              prefixIcon: const Padding(
+                padding: EdgeInsets.only(bottom: 58),
+                child: Icon(Icons.edit_rounded),
+              ),
               filled: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: DropdownButtonFormField<String>(
-              initialValue: model,
-              decoration: InputDecoration(labelText: 'Model', filled: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none)),
-              items: const [
-                DropdownMenuItem(value: 'flux-schnell', child: Text('FLUX Schnell')),
-                DropdownMenuItem(value: 'flux-2-klein', child: Text('FLUX 2 Klein')),
-                DropdownMenuItem(value: 'z-image-turbo', child: Text('Z-Image Turbo')),
-              ],
-              onChanged: generating ? null : (v) { if (v != null) setState(() => model = v); },
-            )),
-            const SizedBox(width: 10),
-            Expanded(child: DropdownButtonFormField<String>(
-              initialValue: aspectRatio,
-              decoration: InputDecoration(labelText: 'Ratio', filled: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none)),
-              items: const [
-                DropdownMenuItem(value: '1:1', child: Text('Square 1:1')),
-                DropdownMenuItem(value: '16:9', child: Text('Landscape 16:9')),
-                DropdownMenuItem(value: '9:16', child: Text('Portrait 9:16')),
-              ],
-              onChanged: generating ? null : (v) { if (v != null) setState(() => aspectRatio = v); },
-            )),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: model,
+                  decoration: InputDecoration(
+                    labelText: 'Model',
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'flux-schnell',
+                      child: Text('FLUX Schnell'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'flux-2-klein',
+                      child: Text('FLUX 2 Klein'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'z-image-turbo',
+                      child: Text('Z-Image Turbo'),
+                    ),
+                  ],
+                  onChanged: generating
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => model = value);
+                          }
+                        },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: aspectRatio,
+                  decoration: InputDecoration(
+                    labelText: 'Ratio',
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: '1:1',
+                      child: Text('Square 1:1'),
+                    ),
+                    DropdownMenuItem(
+                      value: '16:9',
+                      child: Text('Landscape 16:9'),
+                    ),
+                    DropdownMenuItem(
+                      value: '9:16',
+                      child: Text('Portrait 9:16'),
+                    ),
+                  ],
+                  onChanged: generating
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => aspectRatio = value);
+                          }
+                        },
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
           SizedBox(
             height: 54,
             child: FilledButton.icon(
               onPressed: generating ? null : _generate,
-              icon: generating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.image_rounded),
-              label: Text(generating ? 'Creating image…' : 'Generate Image'),
+              icon: generating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.image_rounded),
+              label: Text(
+                generating ? 'Creating image…' : 'Generate Image',
+              ),
             ),
           ),
+          if (generating) ...[
+            const SizedBox(height: 14),
+            const Center(
+              child: Text(
+                'Magic Hour is creating your image. This can take a little while…',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
           if (error != null) ...[
             const SizedBox(height: 14),
-            Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(18)), child: Text(error!, style: TextStyle(color: scheme.onErrorContainer))),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: scheme.errorContainer,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline_rounded, color: scheme.onErrorContainer),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      error!,
+                      style: TextStyle(color: scheme.onErrorContainer),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
           if (imageUrl != null) ...[
             const SizedBox(height: 18),
-            ClipRRect(borderRadius: BorderRadius.circular(24), child: AspectRatio(aspectRatio: aspectRatio == '16:9' ? 16 / 9 : aspectRatio == '9:16' ? 9 / 16 : 1, child: Image.network(imageUrl!, fit: BoxFit.cover, loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator())))),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: AspectRatio(
+                aspectRatio: imageAspect,
+                child: Image.network(
+                  imageUrl!,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: scheme.surfaceContainerHighest,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.all(20),
+                    child: const Text(
+                      'The image was generated, but the image URL could not be displayed.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(creditsCharged == null ? 'Generated by Magic Hour' : 'Magic Hour credits used: $creditsCharged', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              creditsCharged == null
+                  ? 'Generated by Magic Hour'
+                  : 'Magic Hour credits used: $creditsCharged',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ],
       ),
