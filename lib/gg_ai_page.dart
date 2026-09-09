@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'gg_image_page.dart';
+
 class GgAiPage extends StatefulWidget {
   const GgAiPage({super.key});
 
@@ -103,6 +105,11 @@ class _GgAiPageState extends State<GgAiPage> {
         ]),
         actions: [
           IconButton(
+            tooltip: 'Generate image',
+            onPressed: sending ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GgImagePage())),
+            icon: const Icon(Icons.image_rounded),
+          ),
+          IconButton(
             tooltip: 'New AI chat',
             onPressed: sending ? null : () => setState(() => messages.clear()),
             icon: const Icon(Icons.add_comment_rounded),
@@ -128,6 +135,17 @@ class _GgAiPageState extends State<GgAiPage> {
             },
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ActionChip(
+              avatar: const Icon(Icons.image_outlined, size: 18),
+              label: const Text('Create image with Magic Hour'),
+              onPressed: sending ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GgImagePage())),
+            ),
+          ),
+        ),
         Expanded(
           child: messages.isEmpty
               ? Center(
@@ -149,7 +167,7 @@ class _GgAiPageState extends State<GgAiPage> {
                                 ? 'Paste an error or code and let GG AI find the cause and fix it.'
                                 : mode == 'Explain'
                                     ? 'Get clear, step-by-step explanations for code and technical topics.'
-                                    : 'Ask questions, write messages, brainstorm ideas, or get help right inside GG.',
+                                    : 'Ask questions, write messages, brainstorm ideas, or create images right inside GG.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
