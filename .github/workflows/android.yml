@@ -3,9 +3,7 @@ name: Build GG Messenger APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    paths-ignore:
-      - 'web/**'
+    branches: [android-app]
 
 permissions:
   contents: read
