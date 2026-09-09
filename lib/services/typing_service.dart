@@ -11,7 +11,10 @@ class TypingService {
   Timer? _stopTimer;
 
   void start(void Function(bool) onTyping) {
-    _channel = supabase.channel('typing:$conversationId');
+    _channel = supabase.channel(
+      'typing:$conversationId',
+      opts: const RealtimeChannelConfig(private: true),
+    );
     _channel!
         .onBroadcast(event: 'typing', callback: (payload) {
           final data = Map<String, dynamic>.from(payload);
