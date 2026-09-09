@@ -8,6 +8,8 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const String _homeRedirectUrl = 'https://emzaro731-byte.github.io/gg/';
+
   final emailController = TextEditingController();
   final usernameController = TextEditingController();
   final passwordController = TextEditingController();
@@ -38,12 +40,17 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final auth = Supabase.instance.client.auth;
       if (isSignUp) {
-        final response = await auth.signUp(email: email, password: password, data: {'username': username, 'display_name': username});
+        final response = await auth.signUp(
+          email: email,
+          password: password,
+          emailRedirectTo: _homeRedirectUrl,
+          data: {'username': username, 'display_name': username},
+        );
         if (!mounted) return;
         if (response.session != null) {
           setState(() => notice = 'Account created as @$username.');
         } else {
-          setState(() => notice = 'Account created as @$username. Check your email for the confirmation link.');
+          setState(() => notice = 'Account created as @$username. Check your email to confirm your account. After confirmation, you will be returned to GG Messenger.');
         }
       } else {
         await auth.signInWithPassword(email: email, password: password);
@@ -63,7 +70,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!validEmail) return _setError('Enter a valid email address.');
     setState(() { loading = true; error = null; notice = null; });
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(email, redirectTo: _homeRedirectUrl);
       if (mounted) setState(() => notice = 'Password reset link sent to $email.');
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
