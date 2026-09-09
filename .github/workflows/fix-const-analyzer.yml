@@ -23,7 +23,22 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Apply Dart analyzer fixes
+      - name: Remove invalid const constructor invocations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          for filename in ('lib/chat_page.dart', 'lib/gg_ai_page.dart'):
+              path = Path(filename)
+              text = path.read_text()
+              # Remove const only from constructor invocations. This preserves
+              # const declarations and fixes const_with_non_const safely.
+              text = re.sub(r'\bconst\s+([A-Z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)?)\s*\(', r'\1(', text)
+              path.write_text(text)
+          PY
+
+      - name: Apply remaining Dart analyzer fixes
         run: dart fix --apply
 
       - name: Format affected files
