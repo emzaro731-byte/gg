@@ -31,6 +31,15 @@ jobs:
                   raise SystemExit(f'Expected text not found in {path}: {old[:100]}')
               p.write_text(s.replace(old, new, 1))
 
+          def insert_before(path, marker, addition):
+              p = Path(path)
+              s = p.read_text()
+              if addition.strip() in s:
+                  return
+              if marker not in s:
+                  raise SystemExit(f'Expected marker not found in {path}: {marker[:100]}')
+              p.write_text(s.replace(marker, addition + marker, 1))
+
           def insert_after(path, marker, addition):
               p = Path(path)
               s = p.read_text()
@@ -40,26 +49,15 @@ jobs:
                   raise SystemExit(f'Expected marker not found in {path}: {marker[:100]}')
               p.write_text(s.replace(marker, marker + addition, 1))
 
-          # Chat imports and state.
           replace_once(
               'lib/chat_page.dart',
               "import 'package:supabase_flutter/supabase_flutter.dart';\n",
               "import 'package:supabase_flutter/supabase_flutter.dart';\nimport 'package:flutter/services.dart';\nimport 'package:share_plus/share_plus.dart';\nimport 'package:speech_to_text/speech_recognition_result.dart';\nimport 'package:speech_to_text/speech_to_text.dart' as stt;\n",
           )
-          insert_after(
-              'lib/chat_page.dart',
-              '  final recorder = AudioRecorder();\n',
-              '  final speech = stt.SpeechToText();\n',
-          )
-          insert_after(
-              'lib/chat_page.dart',
-              '  bool recording = false;\n',
-              '  bool dictating = false;\n',
-          )
+          insert_after('lib/chat_page.dart', '  final recorder = AudioRecorder();\n', '  final speech = stt.SpeechToText();\n')
+          insert_after('lib/chat_page.dart', '  bool recording = false;\n', '  bool dictating = false;\n')
 
-          # Dictation, copy/share and feedback methods.
-          methods = '''
-  Future<void> _toggleDictation() async {
+          methods = '''  Future<void> _toggleDictation() async {
     if (dictating) {
       await speech.stop();
       if (mounted) setState(() => dictating = false);
@@ -91,9 +89,7 @@ jobs:
   Future<void> _copyMessage(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Copied')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied')));
     }
   }
 
@@ -101,9 +97,7 @@ jobs:
     final path = message['media_url']?.toString();
     if (path != null && path.isNotEmpty) {
       final url = await signedUrl(path);
-      if (url != null) {
-        await Share.share(url);
-      }
+      if (url != null) await Share.share(url);
       return;
     }
     await Share.share(message['body']?.toString() ?? 'GG Messenger');
@@ -126,14 +120,8 @@ jobs:
   }
 
 '''
-          insert_after(
-              'lib/chat_page.dart',
-              '  Future<void> deleteMessage(String id) async {\n',
-              methods,
-          )
+          insert_before('lib/chat_page.dart', '  Future<void> deleteMessage(String id) async {\n', methods)
 
-          # Insert actions after the existing Reply tile. The current file uses
-          # formatted multi-line ListTile syntax, so match the stable onTap block.
           reply_marker = '''            ListTile(
               leading: const Icon(Icons.reply_rounded),
               title: const Text('Reply'),
@@ -179,28 +167,19 @@ jobs:
 '''
           insert_after('lib/chat_page.dart', reply_marker, reply_actions)
 
-          # Voice assistant button.
-          insert_after(
+          insert_before(
               'lib/chat_page.dart',
               "                  IconButton(onPressed: toggleRecording, tooltip: recording ? 'Stop recording' : 'Voice message', icon: Icon(recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded), color: recording ? scheme.error : null),\n",
               "                  IconButton(onPressed: _toggleDictation, tooltip: dictating ? 'Stop voice assistant' : 'Voice assistant', icon: Icon(dictating ? Icons.stop_circle_rounded : Icons.keyboard_voice_rounded), color: dictating ? scheme.error : null),\n",
           )
-          replace_once(
-              'lib/chat_page.dart',
-              '    recorder.dispose();\n',
-              '    speech.stop();\n    recorder.dispose();\n',
-          )
+          replace_once('lib/chat_page.dart', '    recorder.dispose();\n', '    speech.stop();\n    recorder.dispose();\n')
 
-          # Status reactions/share.
           replace_once(
               'lib/status_page.dart',
               "import 'package:video_player/video_player.dart';\n",
               "import 'package:video_player/video_player.dart';\nimport 'package:share_plus/share_plus.dart';\n",
           )
-          insert_after(
-              'lib/status_page.dart',
-              '  Future<void> _load() async {\n',
-              '''  Future<void> _react(String reaction) async {
+          status_methods = '''  Future<void> _react(String reaction) async {
     final id = widget.status['id']?.toString();
     final user = Supabase.instance.client.auth.currentUser;
     if (id == null || user == null) return;
@@ -225,24 +204,20 @@ jobs:
     if (u != null) await Share.share(u);
   }
 
-''',
-          )
+'''
+          insert_before('lib/status_page.dart', '  Future<void> _load() async {\n', status_methods)
           replace_once(
               'lib/status_page.dart',
               "      title: const Text('Status'),\n",
               "      title: const Text('Status'),\n      actions: [\n        IconButton(tooltip: 'Like', onPressed: () => _react('like'), icon: const Icon(Icons.thumb_up_alt_outlined)),\n        IconButton(tooltip: 'Dislike', onPressed: () => _react('dislike'), icon: const Icon(Icons.thumb_down_alt_outlined)),\n        IconButton(tooltip: 'Share', onPressed: _share, icon: const Icon(Icons.share_rounded)),\n      ],\n",
           )
 
-          # Generated image download/share.
           replace_once(
               'lib/gg_image_page.dart',
               "import 'package:supabase_flutter/supabase_flutter.dart';\n",
               "import 'package:supabase_flutter/supabase_flutter.dart';\nimport 'package:http/http.dart' as http;\nimport 'package:share_plus/share_plus.dart';\n",
           )
-          insert_after(
-              'lib/gg_image_page.dart',
-              '  void _clear() {\n',
-              '''  Future<void> _downloadImage() async {
+          image_method = '''  Future<void> _downloadImage() async {
     final url = imageUrl;
     if (url == null) return;
     try {
@@ -261,8 +236,8 @@ jobs:
     }
   }
 
-''',
-          )
+'''
+          insert_before('lib/gg_image_page.dart', '  void _clear() {\n', image_method)
           replace_once(
               'lib/gg_image_page.dart',
               '            const SizedBox(height: 8),\n            Text(\n',
