@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-// OpenAI GPT-OSS 120B, served through Groq.
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") || "openai/gpt-oss-120b";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
@@ -14,10 +13,7 @@ const corsHeaders = {
 };
 
 function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
 function text(value: unknown, max = 12000): string {
@@ -27,7 +23,9 @@ function text(value: unknown, max = 12000): string {
 function modeInstruction(mode: string): string {
   const instructions: Record<string, string> = {
     Chat: "Act as a versatile general-purpose assistant.",
-    Code: "Act as an expert software engineer. Prefer correct, complete, runnable solutions and explain important errors or trade-offs.",
+    Code: "Act as an expert software engineer. Produce complete, correct, runnable code. Think through architecture, edge cases, security and dependencies before answering. Prefer practical implementation over vague advice.",
+    Debug: "Act as a senior debugging engineer. Diagnose the root cause first, identify the exact failing part, then provide a concrete fix and verification steps. Consider logs, dependencies, configuration, async behavior and platform differences.",
+    Explain: "Act as an expert technical teacher. Explain code and technical concepts clearly from first principles, then show concise practical examples.",
     Study: "Act as a patient tutor. Teach progressively, use examples and make difficult topics easy to understand.",
     Write: "Act as a professional writing assistant. Produce polished, usable text and match the requested audience and tone.",
     Creative: "Act as a creative partner. Generate original ideas and polished creative content.",
@@ -43,7 +41,9 @@ Core behavior:
 - Give accurate, useful and natural answers.
 - Understand conversation context.
 - Help with programming, mathematics, science, writing, business, education, technology and creative work.
-- For code, provide complete practical solutions and important implementation details.
+- For code, provide complete practical solutions with correct syntax, dependencies and important implementation details.
+- For debugging, do not guess blindly: reason from the supplied code, logs and configuration, state uncertainty when evidence is missing, and give a minimal reproducible fix when possible.
+- For Flutter/Dart, React/React Native, TypeScript, Python, SQL, Supabase, GitHub Actions and APIs, favor production-ready patterns.
 - Never claim to have performed an action you did not perform.
 - Never invent sources, facts, links, tool results or capabilities.
 - If information may be outdated or uncertain, say so clearly.
@@ -62,17 +62,13 @@ serve(async (req) => {
   if (!GROQ_API_KEY) return jsonResponse({ error: "GROQ_API_KEY is not configured in Supabase Function Secrets." }, 503);
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authorization } },
-    });
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authorization } } });
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) return jsonResponse({ error: "Invalid or expired session." }, 401);
 
     const body = await req.json();
     let input = Array.isArray(body?.messages) ? body.messages : [];
-    if (input.length === 0 && typeof body?.message === "string" && body.message.trim()) {
-      input = [{ role: "user", content: body.message.trim() }];
-    }
+    if (input.length === 0 && typeof body?.message === "string" && body.message.trim()) input = [{ role: "user", content: body.message.trim() }];
 
     const messages = input
       .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
@@ -93,25 +89,23 @@ serve(async (req) => {
     ].filter(Boolean);
 
     const selectedModel = text(body?.model, 120) || GROQ_MODEL;
+    const codingMode = mode === "Code" || mode === "Debug" || mode === "Explain";
     const temperature = typeof body?.temperature === "number"
       ? Math.min(Math.max(body.temperature, 0), 2)
-      : 0.7;
+      : codingMode ? 0.2 : 0.7;
     const maxTokens = typeof body?.max_tokens === "number"
       ? Math.min(Math.max(body.max_tokens, 256), 16384)
-      : 8192;
+      : codingMode ? 12288 : 8192;
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
       body: JSON.stringify({
         model: selectedModel,
         messages: [{ role: "system", content: systemParts.join("\n\n") }, ...messages],
         temperature,
         max_tokens: maxTokens,
-        reasoning_effort: "medium",
+        reasoning_effort: codingMode ? "high" : "medium",
       }),
     });
 
@@ -128,13 +122,7 @@ serve(async (req) => {
     const reply = data?.choices?.[0]?.message?.content?.toString().trim();
     if (!reply) return jsonResponse({ error: "GG AI returned an empty response." }, 502);
 
-    return jsonResponse({
-      reply,
-      model: selectedModel,
-      provider: "groq",
-      user_id: user.id,
-      usage: data?.usage ?? null,
-    });
+    return jsonResponse({ reply, model: selectedModel, provider: "groq", user_id: user.id, mode, usage: data?.usage ?? null });
   } catch (error) {
     console.error("GG AI function error:", error);
     return jsonResponse({ error: error instanceof Error ? error.message : "Unexpected server error." }, 500);
