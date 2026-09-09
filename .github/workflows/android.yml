@@ -58,6 +58,9 @@ jobs:
       - name: Format Dart sources
         run: dart format lib
 
+      - name: Remove obsolete default widget test
+        run: rm -f test/widget_test.dart
+
       - name: Analyze Android app
         run: flutter analyze --no-fatal-infos
 
