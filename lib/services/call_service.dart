@@ -15,11 +15,16 @@ class CallService {
   MediaStream? localStream;
   MediaStream? remoteStream;
 
+  RealtimeChannel _privateChannel(String topic) => supabase.channel(
+        topic,
+        opts: const RealtimeChannelConfig(private: true),
+      );
+
   Future<void> listenForInvites({required BuildContext context, required String conversationId}) async {
     await _inviteChannel?.unsubscribe();
     final user = supabase.auth.currentUser;
     if (user == null) return;
-    _inviteChannel = supabase.channel('call-invite:$conversationId');
+    _inviteChannel = _privateChannel('call-invite:$conversationId');
     _inviteChannel!
         .onBroadcast(event: 'invite', callback: (payload) {
           if (!context.mounted) return;
@@ -44,7 +49,7 @@ class CallService {
       'status': 'ringing',
     }).select('id').single();
     final callId = row['id'].toString();
-    final invite = supabase.channel('call-invite:$conversationId');
+    final invite = _privateChannel('call-invite:$conversationId');
     invite.subscribe((status, _) async {
       if (status == RealtimeSubscribeStatus.subscribed) {
         await invite.sendBroadcastMessage(event: 'invite', payload: {
@@ -125,7 +130,7 @@ class CallService {
         'sdp_mline_index': candidate.sdpMLineIndex,
       }));
     };
-    _signalChannel = supabase.channel('call:$callId');
+    _signalChannel = _privateChannel('call:$callId');
     _signalChannel!.onBroadcast(event: 'signal', callback: (payload) {
       final data = Map<String, dynamic>.from(payload);
       if (data['from']?.toString() == localUserId) return;
