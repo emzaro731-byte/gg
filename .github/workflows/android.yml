@@ -53,6 +53,9 @@ jobs:
           p.write_text(s)
           PY
 
+      - name: Apply email password + OTP authentication
+        run: python3 tool/apply_phone_otp_auth.py
+
       - name: Get dependencies
         run: flutter pub get
 
