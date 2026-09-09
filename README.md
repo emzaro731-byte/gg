@@ -1,9 +1,10 @@
 # GG Messenger
 
-GG Messenger is a modern Flutter + Supabase realtime messenger foundation, upgraded for secure configuration, polished Material 3 UI, realtime chat, media, presence and voice/video calling.
+GG Messenger is a **native Flutter Android messenger app** backed by Supabase. The Android app is built as a real Flutter application — it does not use a website, WebView, Flutter Web, or a web deployment.
 
 ## Stack
 - Flutter / Dart
+- Native Android build
 - Supabase Auth, Postgres, Realtime, Storage and Edge Functions
 - Material 3 with system light/dark mode
 - WebRTC voice/video calling
@@ -15,6 +16,8 @@ GG Messenger is a modern Flutter + Supabase realtime messenger foundation, upgra
 - Realtime conversation and message streams
 - Secure direct-chat creation through a Postgres RPC
 - Online/offline presence
+- Offline chat history cache and queued outgoing messages
+- Automatic synchronization when connectivity returns
 - Reply, edit and delete your own messages
 - Message reactions
 - Read receipts and unread counts
@@ -24,7 +27,14 @@ GG Messenger is a modern Flutter + Supabase realtime messenger foundation, upgra
 - Status/updates and group-chat foundations
 - Supabase Row Level Security
 - Data-saver oriented media handling
-- Release APK + Android App Bundle CI builds
+
+## Android-only architecture
+
+The `android-app` branch is the dedicated Android application source. Website files and web deployment workflows are not part of the Android app.
+
+The installed Android application does **not** update when a separate website is changed. A new Android APK must be intentionally built from the `android-app` branch and installed/released.
+
+Supabase remains connected as the backend, so accounts, chats, messages, realtime events, media and other online features continue to work normally.
 
 ## Local setup
 
@@ -38,7 +48,7 @@ GG Messenger is a modern Flutter + Supabase realtime messenger foundation, upgra
 flutter pub get
 ```
 
-6. Run the app with runtime configuration:
+6. Run the Android app with runtime configuration:
 
 ```bash
 flutter run \
@@ -55,12 +65,11 @@ The Android workflow expects these **GitHub Actions repository secrets**:
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
 
-The workflow builds both:
+The Android workflow builds **APK only**:
 
 - `app-release.apk` for direct Android installation/testing
-- `app-release.aab` for Google Play distribution
 
-After a successful workflow run, download both from the workflow's **Artifacts** section.
+The workflow runs only for the `android-app` branch or when manually dispatched. Website changes on another branch do not trigger the Android APK build.
 
 ## Backend architecture
 
