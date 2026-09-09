@@ -45,7 +45,7 @@ class CallService {
       'conversation_id': conversationId,
       'caller_id': user.id,
       'callee_id': calleeId,
-      'call_type': video ? 'video' : 'audio',
+      'kind': video ? 'video' : 'voice',
       'status': 'ringing',
     }).select('id').single();
     final callId = row['id'].toString();
@@ -161,13 +161,13 @@ class CallService {
     final answer = await peerConnection!.createAnswer({'offerToReceiveAudio': 1, 'offerToReceiveVideo': 1});
     await peerConnection!.setLocalDescription(answer);
     await _signal(callId, localUserId, {'type': 'answer', 'sdp': answer.sdp, 'sdp_type': answer.type});
-    await supabase.from('call_sessions').update({'status': 'accepted', 'answered_at': DateTime.now().toUtc().toIso8601String()}).eq('id', callId);
+    await supabase.from('call_sessions').update({'status': 'accepted'}).eq('id', callId);
   }
 
   Future<void> applyAnswer(String callId, String? sdp) async {
     if (sdp == null || peerConnection == null) return;
     await peerConnection!.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
-    await supabase.from('call_sessions').update({'status': 'accepted', 'answered_at': DateTime.now().toUtc().toIso8601String()}).eq('id', callId);
+    await supabase.from('call_sessions').update({'status': 'accepted'}).eq('id', callId);
   }
 
   Future<void> addIceCandidate(Map<String, dynamic> data) async {
