@@ -1,0 +1,64 @@
+name: Final const fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Remove the two invalid const constructors
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          replacements = {
+              'lib/chat_page.dart': [
+                  ("          const Padding(\n            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),", "          Padding(\n            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),"),
+              ],
+              'lib/gg_ai_page.dart': [
+                  ("          const Padding(\n            padding: EdgeInsets.fromLTRB(20, 0, 20, 6),", "          Padding(\n            padding: EdgeInsets.fromLTRB(20, 0, 20, 6),"),
+              ],
+          }
+          for filename, pairs in replacements.items():
+              p = Path(filename)
+              text = p.read_text()
+              original = text
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              if text == original:
+                  print(f'No exact replacement found in {filename}')
+              else:
+                  p.write_text(text)
+                  print(f'Fixed {filename}')
+          PY
+
+      - name: Verify
+        run: |
+          flutter pub get
+          dart format lib/chat_page.dart lib/status_page.dart lib/gg_ai_page.dart lib/gg_image_page.dart
+          flutter analyze --no-fatal-infos
+
+      - name: Commit verified fix
+        run: |
+          if git diff --quiet; then
+            echo 'No changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/chat_page.dart lib/gg_ai_page.dart
+          git commit -m 'fix: remove invalid const constructors'
+          git push
