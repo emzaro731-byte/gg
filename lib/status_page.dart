@@ -89,7 +89,6 @@ class _StatusPageState extends State<StatusPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _stream,
