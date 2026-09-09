@@ -24,6 +24,7 @@ class PresenceService {
     _channel = supabase.channel(
       'global:presence',
       opts: RealtimeChannelConfig(
+        private: true,
         presence: PresenceConfig(key: user.id),
       ),
     );
