@@ -1,0 +1,5 @@
+# GG Messenger Supabase Edge Function configuration
+# Authentication is handled inside the functions using the caller's Supabase session.
+
+[functions.gg-ai-chat]
+verify_jwt = false
