@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
+import 'group_chat_page.dart';
 
 class NewChatPage extends StatefulWidget {
   const NewChatPage({super.key, this.initialUserId});
@@ -61,7 +62,16 @@ class _NewChatPageState extends State<NewChatPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('New chat')),
+    appBar: AppBar(
+      title: const Text('New chat'),
+      actions: [
+        IconButton(
+          tooltip: 'New group',
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GroupChatPage())),
+          icon: const Icon(Icons.groups_rounded),
+        ),
+      ],
+    ),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(12), child: TextField(controller: search, autofocus: true, onChanged: findUsers, decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Search people', border: OutlineInputBorder(borderRadius: BorderRadius.circular(18))))),
       Expanded(child: loading ? const Center(child: CircularProgressIndicator()) : ListView.separated(itemCount: users.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) {
