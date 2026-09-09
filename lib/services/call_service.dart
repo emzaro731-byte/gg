@@ -136,7 +136,7 @@ class CallService {
       if (data['from']?.toString() == localUserId) return;
       final type = data['type']?.toString();
       if (type == 'answer') {
-        applyAnswer(data['sdp']?.toString());
+        applyAnswer(callId, data['sdp']?.toString());
       } else if (type == 'offer' && !isCaller) {
         acceptOffer(callId, localUserId, data['sdp']?.toString());
       } else if (type == 'ice') {
@@ -164,10 +164,10 @@ class CallService {
     await supabase.from('call_sessions').update({'status': 'accepted', 'answered_at': DateTime.now().toUtc().toIso8601String()}).eq('id', callId);
   }
 
-  Future<void> applyAnswer(String? sdp) async {
+  Future<void> applyAnswer(String callId, String? sdp) async {
     if (sdp == null || peerConnection == null) return;
     await peerConnection!.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
-    await supabase.from('call_sessions').update({'status': 'accepted', 'answered_at': DateTime.now().toUtc().toIso8601String()}).eq('id', _signalChannel?.topic.split(':').last ?? '');
+    await supabase.from('call_sessions').update({'status': 'accepted', 'answered_at': DateTime.now().toUtc().toIso8601String()}).eq('id', callId);
   }
 
   Future<void> addIceCandidate(Map<String, dynamic> data) async {
