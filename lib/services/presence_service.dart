@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Tracks the signed-in user's online state with Supabase Realtime Presence.
-/// Presence is intentionally used for slow-changing state such as online/offline,
-/// not high-frequency events such as typing.
 class PresenceService {
   PresenceService(this.supabase);
 
@@ -23,10 +21,7 @@ class PresenceService {
 
     _channel = supabase.channel(
       'global:presence',
-      opts: RealtimeChannelConfig(
-        private: true,
-        presence: PresenceConfig(key: user.id),
-      ),
+      opts: const RealtimeChannelConfig(private: true),
     );
 
     _channel!
@@ -42,7 +37,6 @@ class PresenceService {
         _started = true;
         _publishState();
       } else if (error != null) {
-        // Presence failure must never prevent the messenger UI from loading.
         _onlineUsers.add(<String>{});
       }
     });
@@ -52,13 +46,12 @@ class PresenceService {
     final channel = _channel;
     if (channel == null) return;
 
-    final state = channel.presenceState();
+    final states = channel.presenceState();
     final ids = <String>{};
-    for (final entries in state.values) {
-      for (final entry in entries) {
-        if (entry is Map && entry['user_id'] != null) {
-          ids.add(entry['user_id'].toString());
-        }
+    for (final state in states) {
+      for (final presence in state.presences) {
+        final id = presence.payload['user_id']?.toString();
+        if (id != null && id.isNotEmpty) ids.add(id);
       }
     }
     _onlineUsers.add(ids);
