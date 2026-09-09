@@ -64,17 +64,39 @@ jobs:
               s = s.replace(marker, marker + permissions)
           manifest.write_text(s)
 
-          gradle = Path('android/app/build.gradle')
+          candidates = [Path('android/app/build.gradle.kts'), Path('android/app/build.gradle')]
+          gradle = next((p for p in candidates if p.exists()), None)
+          if gradle is None:
+              raise SystemExit('Android app Gradle file not found')
+
           s = gradle.read_text()
-          if 'coreLibraryDesugaringEnabled true' not in s:
-              anchor = 'android {\n'
-              replacement = '''android {\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n\n'''
-              s = s.replace(anchor, replacement, 1)
-          if 'multiDexEnabled true' not in s:
-              s = s.replace('defaultConfig {\n', 'defaultConfig {\n        multiDexEnabled true\n', 1)
-          if 'coreLibraryDesugaring ' not in s:
-              s = s.replace('dependencies {\n', "dependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n", 1)
+          is_kts = gradle.suffix == '.kts'
+
+          if is_kts:
+              if 'isCoreLibraryDesugaringEnabled = true' not in s:
+                  block = '''\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }\n'''
+                  s = s.replace('android {', 'android {' + block, 1)
+              if 'multiDexEnabled = true' not in s:
+                  s = s.replace('defaultConfig {', 'defaultConfig {\n        multiDexEnabled = true', 1)
+              if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in s:
+                  if 'dependencies {' in s:
+                      s = s.replace('dependencies {', 'dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")', 1)
+                  else:
+                      s += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
+          else:
+              if 'coreLibraryDesugaringEnabled true' not in s:
+                  block = '''\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n'''
+                  s = s.replace('android {', 'android {' + block, 1)
+              if 'multiDexEnabled true' not in s:
+                  s = s.replace('defaultConfig {', 'defaultConfig {\n        multiDexEnabled true', 1)
+              if "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'" not in s:
+                  if 'dependencies {' in s:
+                      s = s.replace('dependencies {', "dependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'", 1)
+                  else:
+                      s += "\n\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n}\n"
+
           gradle.write_text(s)
+          print(f'Configured notification desugaring in {gradle}')
           PY
 
       - name: Upgrade premium interface
