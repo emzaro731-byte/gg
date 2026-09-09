@@ -3,14 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'chat_page.dart';
+import 'chat_page.dart' as realtime;
 import 'services/offline_sync_service.dart';
 
-/// Chooses the normal realtime ChatPage when Supabase is reachable and a
-/// lightweight cached/queued chat when it is not. This keeps the existing
-/// online chat features while making message history and drafts usable offline.
-class OfflineFirstChatPage extends StatefulWidget {
-  const OfflineFirstChatPage({
+/// Drop-in ChatPage that uses the existing realtime chat whenever Supabase is
+/// reachable, and a cached/queued chat while offline.
+class ChatPage extends StatefulWidget {
+  const ChatPage({
     required this.conversationId,
     required this.title,
     super.key,
@@ -20,10 +19,10 @@ class OfflineFirstChatPage extends StatefulWidget {
   final String title;
 
   @override
-  State<OfflineFirstChatPage> createState() => _OfflineFirstChatPageState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
-class _OfflineFirstChatPageState extends State<OfflineFirstChatPage> {
+class _ChatPageState extends State<ChatPage> {
   final sync = OfflineSyncService.instance;
   Timer? _probe;
   bool? _online;
@@ -49,7 +48,11 @@ class _OfflineFirstChatPageState extends State<OfflineFirstChatPage> {
   Future<bool> _probeSupabase() async {
     try {
       await supabase.auth.getSession();
-      await supabase.from('messages').select('id').eq('conversation_id', widget.conversationId).limit(1);
+      await supabase
+          .from('messages')
+          .select('id')
+          .eq('conversation_id', widget.conversationId)
+          .limit(1);
       return true;
     } catch (_) {
       return false;
@@ -65,7 +68,7 @@ class _OfflineFirstChatPageState extends State<OfflineFirstChatPage> {
   @override
   Widget build(BuildContext context) {
     if (_online == true) {
-      return ChatPage(
+      return realtime.ChatPage(
         conversationId: widget.conversationId,
         title: widget.title,
       );
@@ -134,10 +137,7 @@ class _CachedChatState extends State<_CachedChat> {
       '_queued_at': now,
     };
 
-    await sync.queueMessage(
-      conversationId: widget.conversationId,
-      message: message,
-    );
+    await sync.queueMessage(conversationId: widget.conversationId, message: message);
     await sync.syncConversation(widget.conversationId);
     await sync.saveDraft(widget.conversationId, '');
     final cached = await sync.loadMessages(widget.conversationId);
@@ -151,8 +151,7 @@ class _CachedChatState extends State<_CachedChat> {
     unawaited(widget.onOnline());
   }
 
-  Future<void> _draftChanged(String value) =>
-      sync.saveDraft(widget.conversationId, value);
+  Future<void> _draftChanged(String value) => sync.saveDraft(widget.conversationId, value);
 
   @override
   void dispose() {
