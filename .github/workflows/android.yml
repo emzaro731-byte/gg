@@ -25,6 +25,23 @@ jobs:
       - name: Generate Android project only
         run: flutter create --platforms=android --project-name gg_messenger .
 
+      - name: Apply premium GG launcher branding
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq librsvg2-bin
+          mkdir -p android/app/src/main/res/drawable-nodpi
+          rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o android/app/src/main/res/drawable-nodpi/gg_launcher.png
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          s = manifest.read_text()
+          s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/gg_launcher"')
+          s = s.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/gg_launcher"')
+          manifest.write_text(s)
+          print('Premium GG launcher icon configured')
+          PY
+
       - name: Fix Android core library desugaring
         shell: bash
         run: |
