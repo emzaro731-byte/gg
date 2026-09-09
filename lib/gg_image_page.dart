@@ -31,7 +31,9 @@ class _GgImagePageState extends State<GgImagePage> {
 
     final session = supabase.auth.currentSession;
     if (session == null) {
-      setState(() => error = 'Please sign in to GG before generating an image.');
+      setState(
+        () => error = 'Please sign in to GG before generating an image.',
+      );
       return;
     }
 
@@ -112,8 +114,8 @@ class _GgImagePageState extends State<GgImagePage> {
     final imageAspect = aspectRatio == '16:9'
         ? 16 / 9
         : aspectRatio == '9:16'
-            ? 9 / 16
-            : 1.0;
+        ? 9 / 16
+        : 1.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -136,10 +138,7 @@ class _GgImagePageState extends State<GgImagePage> {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  scheme.primaryContainer,
-                  scheme.secondaryContainer,
-                ],
+                colors: [scheme.primaryContainer, scheme.secondaryContainer],
               ),
               borderRadius: BorderRadius.circular(28),
             ),
@@ -150,10 +149,7 @@ class _GgImagePageState extends State<GgImagePage> {
                 SizedBox(height: 10),
                 Text(
                   'Create with GG',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
                 ),
                 SizedBox(height: 4),
                 Text(
@@ -234,10 +230,7 @@ class _GgImagePageState extends State<GgImagePage> {
                     ),
                   ),
                   items: const [
-                    DropdownMenuItem(
-                      value: '1:1',
-                      child: Text('Square 1:1'),
-                    ),
+                    DropdownMenuItem(value: '1:1', child: Text('Square 1:1')),
                     DropdownMenuItem(
                       value: '16:9',
                       child: Text('Landscape 16:9'),
@@ -270,9 +263,7 @@ class _GgImagePageState extends State<GgImagePage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.image_rounded),
-              label: Text(
-                generating ? 'Creating image…' : 'Generate Image',
-              ),
+              label: Text(generating ? 'Creating image…' : 'Generate Image'),
             ),
           ),
           if (generating) ...[
@@ -295,7 +286,10 @@ class _GgImagePageState extends State<GgImagePage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.error_outline_rounded, color: scheme.onErrorContainer),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: scheme.onErrorContainer,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -318,9 +312,7 @@ class _GgImagePageState extends State<GgImagePage> {
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
+                    return const Center(child: CircularProgressIndicator());
                   },
                   errorBuilder: (context, error, stackTrace) => Container(
                     color: scheme.surfaceContainerHighest,

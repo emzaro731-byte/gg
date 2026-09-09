@@ -33,8 +33,14 @@ class _StatusPageState extends State<StatusPage> {
           decoration: const InputDecoration(hintText: 'Share an update...'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Post')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Post'),
+          ),
         ],
       ),
     );
@@ -49,7 +55,10 @@ class _StatusPageState extends State<StatusPage> {
 
   Future<void> _mediaStatus() async {
     if (uploading) return;
-    final result = await FilePicker.platform.pickFiles(type: FileType.media, withData: true);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.media,
+      withData: true,
+    );
     final file = result?.files.single;
     final bytes = file?.bytes;
     if (file == null || bytes == null) return;
@@ -58,21 +67,27 @@ class _StatusPageState extends State<StatusPage> {
     final type = isVideo ? 'video' : 'image';
     final contentType = _contentType(extension, isVideo);
     final userId = supabase.auth.currentUser!.id;
-    final storagePath = '$userId/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final storagePath =
+        '$userId/${DateTime.now().millisecondsSinceEpoch}.$extension';
     setState(() => uploading = true);
     try {
-      await supabase.storage.from('status-media').uploadBinary(
-        storagePath,
-        bytes,
-        fileOptions: FileOptions(contentType: contentType, upsert: false),
-      );
+      await supabase.storage
+          .from('status-media')
+          .uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: FileOptions(contentType: contentType, upsert: false),
+          );
       await supabase.from('statuses').insert({
         'user_id': userId,
         'media_path': storagePath,
         'media_type': type,
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     } finally {
       if (mounted) setState(() => uploading = false);
     }
@@ -80,15 +95,24 @@ class _StatusPageState extends State<StatusPage> {
 
   String _contentType(String extension, bool isVideo) {
     const types = {
-      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
-      'mp4': 'video/mp4', 'mov': 'video/quicktime', 'm4v': 'video/x-m4v', 'webm': 'video/webm',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'm4v': 'video/x-m4v',
+      'webm': 'video/webm',
     };
     return types[extension] ?? (isVideo ? 'video/*' : 'image/*');
   }
 
   Future<String?> _url(String path) async {
     try {
-      return await supabase.storage.from('status-media').createSignedUrl(path, 3600);
+      return await supabase.storage
+          .from('status-media')
+          .createSignedUrl(path, 3600);
     } catch (_) {
       return null;
     }
@@ -100,7 +124,8 @@ class _StatusPageState extends State<StatusPage> {
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _stream,
         builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('Unable to load updates.'));
+          if (snapshot.hasError)
+            return Center(child: Text('Unable to load updates.'));
           final now = DateTime.now();
           final statuses = (snapshot.data ?? []).where((s) {
             final expiry = DateTime.tryParse(s['expires_at']?.toString() ?? '');
@@ -121,27 +146,65 @@ class _StatusPageState extends State<StatusPage> {
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
-                          _StoryAvatar(label: 'You', active: mine.isNotEmpty, large: true),
+                          _StoryAvatar(
+                            label: 'You',
+                            active: mine.isNotEmpty,
+                            large: true,
+                          ),
                           const SizedBox(width: 14),
                           Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              const Text('My status', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                              Text(mine.isEmpty ? 'Tap + to share an update' : '${mine.length} active update${mine.length == 1 ? '' : 's'}', style: Theme.of(context).textTheme.bodySmall),
-                            ]),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'My status',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  mine.isEmpty
+                                      ? 'Tap + to share an update'
+                                      : '${mine.length} active update${mine.length == 1 ? '' : 's'}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
-                          IconButton.filledTonal(onPressed: uploading ? null : _textStatus, icon: const Icon(Icons.edit_rounded)),
+                          IconButton.filledTonal(
+                            onPressed: uploading ? null : _textStatus,
+                            icon: const Icon(Icons.edit_rounded),
+                          ),
                           const SizedBox(width: 5),
-                          IconButton.filled(onPressed: uploading ? null : _mediaStatus, icon: const Icon(Icons.add_a_photo_rounded)),
+                          IconButton.filled(
+                            onPressed: uploading ? null : _mediaStatus,
+                            icon: const Icon(Icons.add_a_photo_rounded),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ),
               ),
-              if (uploading) const SliverToBoxAdapter(child: LinearProgressIndicator(minHeight: 2)),
-              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(20, 18, 20, 8), child: Text('Recent updates', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20))),),
+              if (uploading)
+                const SliverToBoxAdapter(
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  child: Text(
+                    'Recent updates',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                  ),
+                ),
+              ),
               if (others.isEmpty)
-                const SliverFillRemaining(hasScrollBody: false, child: Center(child: Text('No recent updates yet.')))
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text('No recent updates yet.')),
+                )
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 110),
@@ -178,7 +241,13 @@ class _GlassCard extends StatelessWidget {
         color: scheme.surface.withValues(alpha: .72),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(color: scheme.outline.withValues(alpha: .12)),
-        boxShadow: [BoxShadow(color: scheme.shadow.withValues(alpha: .08), blurRadius: 24, offset: const Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: .08),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: child,
     );
@@ -186,7 +255,11 @@ class _GlassCard extends StatelessWidget {
 }
 
 class _StoryAvatar extends StatelessWidget {
-  const _StoryAvatar({required this.label, required this.active, this.large = false});
+  const _StoryAvatar({
+    required this.label,
+    required this.active,
+    this.large = false,
+  });
   final String label;
   final bool active;
   final bool large;
@@ -196,11 +269,23 @@ class _StoryAvatar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: active ? scheme.primary : scheme.outlineVariant, width: 2.5)),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: active ? scheme.primary : scheme.outlineVariant,
+          width: 2.5,
+        ),
+      ),
       child: CircleAvatar(
         radius: large ? 29 : 25,
         backgroundColor: scheme.primaryContainer,
-        child: Text(label.isEmpty ? '?' : label.substring(0, 1).toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: scheme.onPrimaryContainer)),
+        child: Text(
+          label.isEmpty ? '?' : label.substring(0, 1).toUpperCase(),
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            color: scheme.onPrimaryContainer,
+          ),
+        ),
       ),
     );
   }
@@ -222,12 +307,30 @@ class _StatusTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: _GlassCard(
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 4,
+          ),
           leading: _StoryAvatar(label: userId, active: true),
-          title: Text('User ${userId.length > 6 ? userId.substring(0, 6) : userId}', style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text(type == 'text' ? (caption ?? 'Text update') : '${type[0].toUpperCase()}${type.substring(1)} update', maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(
+            'User ${userId.length > 6 ? userId.substring(0, 6) : userId}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: Text(
+            type == 'text'
+                ? (caption ?? 'Text update')
+                : '${type[0].toUpperCase()}${type.substring(1)} update',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           trailing: Text(left, style: Theme.of(context).textTheme.labelSmall),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StatusViewerPage(status: status, signedUrl: signedUrl))),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  StatusViewerPage(status: status, signedUrl: signedUrl),
+            ),
+          ),
         ),
       ),
     );
@@ -242,7 +345,11 @@ class _StatusTile extends StatelessWidget {
 }
 
 class StatusViewerPage extends StatefulWidget {
-  const StatusViewerPage({super.key, required this.status, required this.signedUrl});
+  const StatusViewerPage({
+    super.key,
+    required this.status,
+    required this.signedUrl,
+  });
   final Map<String, dynamic> status;
   final Future<String?> Function(String) signedUrl;
 
@@ -271,7 +378,11 @@ class _StatusViewerPageState extends State<StatusViewerPage> {
     final user = Supabase.instance.client.auth.currentUser;
     if (id == null || user == null) return;
     try {
-      await Supabase.instance.client.from('status_views').upsert({'status_id': id, 'viewer_id': user.id, 'viewed_at': DateTime.now().toUtc().toIso8601String()});
+      await Supabase.instance.client.from('status_views').upsert({
+        'status_id': id,
+        'viewer_id': user.id,
+        'viewed_at': DateTime.now().toUtc().toIso8601String(),
+      });
     } catch (_) {}
   }
 
@@ -308,22 +419,67 @@ class _StatusViewerPageState extends State<StatusViewerPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, title: const Text('Status')),
-        body: Center(
-          child: loading
-              ? const CircularProgressIndicator(color: Colors.white)
-              : type == 'text'
-                  ? Padding(padding: const EdgeInsets.all(32), child: Text(caption, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)))
-                  : url == null
-                      ? const Text('Unable to open this status', style: TextStyle(color: Colors.white))
-                      : type == 'video' && video != null
-                          ? AspectRatio(aspectRatio: video!.value.aspectRatio == 0 ? 16 / 9 : video!.value.aspectRatio, child: Stack(alignment: Alignment.bottomCenter, children: [
-                              VideoPlayer(video!),
-                              VideoProgressIndicator(video!, allowScrubbing: true, padding: const EdgeInsets.all(12)),
-                              Positioned(bottom: 24, child: IconButton.filled(onPressed: () async { if (video!.value.isPlaying) { await video!.pause(); } else { await video!.play(); } if (mounted) setState(() {}); }, icon: Icon(video!.value.isPlaying ? Icons.pause : Icons.play_arrow))),
-                            ]))
-                          : InteractiveViewer(child: Image.network(url!, fit: BoxFit.contain)),
-        ),
-      );
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      title: const Text('Status'),
+    ),
+    body: Center(
+      child: loading
+          ? const CircularProgressIndicator(color: Colors.white)
+          : type == 'text'
+          ? Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                caption,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          : url == null
+          ? const Text(
+              'Unable to open this status',
+              style: TextStyle(color: Colors.white),
+            )
+          : type == 'video' && video != null
+          ? AspectRatio(
+              aspectRatio: video!.value.aspectRatio == 0
+                  ? 16 / 9
+                  : video!.value.aspectRatio,
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  VideoPlayer(video!),
+                  VideoProgressIndicator(
+                    video!,
+                    allowScrubbing: true,
+                    padding: const EdgeInsets.all(12),
+                  ),
+                  Positioned(
+                    bottom: 24,
+                    child: IconButton.filled(
+                      onPressed: () async {
+                        if (video!.value.isPlaying) {
+                          await video!.pause();
+                        } else {
+                          await video!.play();
+                        }
+                        if (mounted) setState(() {});
+                      },
+                      icon: Icon(
+                        video!.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : InteractiveViewer(child: Image.network(url!, fit: BoxFit.contain)),
+    ),
+  );
 }

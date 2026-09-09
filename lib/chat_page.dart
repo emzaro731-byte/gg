@@ -12,7 +12,11 @@ import 'services/recording_file.dart';
 import 'services/typing_service.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({required this.conversationId, required this.title, super.key});
+  const ChatPage({
+    required this.conversationId,
+    required this.title,
+    super.key,
+  });
   final String conversationId;
   final String title;
 
@@ -59,23 +63,35 @@ class _ChatPageState extends State<ChatPage> {
         .onPresenceJoin((_) => _refreshPresence())
         .onPresenceLeave((_) => _refreshPresence())
         .subscribe((status, _) async {
-      if (status == RealtimeSubscribeStatus.subscribed) {
-        await presenceChannel.track({'user_id': userId, 'online_at': DateTime.now().toUtc().toIso8601String()});
-        _refreshPresence();
-      }
-    });
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            await presenceChannel.track({
+              'user_id': userId,
+              'online_at': DateTime.now().toUtc().toIso8601String(),
+            });
+            _refreshPresence();
+          }
+        });
 
     typingService = TypingService(supabase, widget.conversationId)
       ..start((value) {
         if (mounted) setState(() => typing = value);
       });
-    unawaited(CallService.instance.listenForInvites(context: context, conversationId: widget.conversationId));
+    unawaited(
+      CallService.instance.listenForInvites(
+        context: context,
+        conversationId: widget.conversationId,
+      ),
+    );
   }
 
   void _refreshPresence() {
     if (!mounted) return;
     final states = presenceChannel.presenceState();
-    final found = states.any((state) => state.presences.any((p) => p.payload['user_id']?.toString() != userId));
+    final found = states.any(
+      (state) => state.presences.any(
+        (p) => p.payload['user_id']?.toString() != userId,
+      ),
+    );
     setState(() => online = found);
   }
 
@@ -101,7 +117,10 @@ class _ChatPageState extends State<ChatPage> {
         title: widget.title,
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Call failed: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Call failed: $e')));
     }
   }
 
@@ -120,10 +139,14 @@ class _ChatPageState extends State<ChatPage> {
     try {
       await typingService.setTyping(false);
       if (edit != null) {
-        await supabase.from('messages').update({
-          'body': text,
-          'edited_at': DateTime.now().toUtc().toIso8601String(),
-        }).eq('id', edit).eq('sender_id', userId);
+        await supabase
+            .from('messages')
+            .update({
+              'body': text,
+              'edited_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', edit)
+            .eq('sender_id', userId);
       } else {
         await supabase.from('messages').insert({
           'conversation_id': widget.conversationId,
@@ -134,7 +157,10 @@ class _ChatPageState extends State<ChatPage> {
         });
       }
     } on PostgrestException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => sending = false);
     }
@@ -142,7 +168,10 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> pickAttachment() async {
     if (uploading) return;
-    final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+    final result = await FilePicker.platform.pickFiles(
+      withData: true,
+      allowMultiple: false,
+    );
     final file = result?.files.single;
     final bytes = file?.bytes;
     if (file == null || bytes == null) return;
@@ -150,12 +179,15 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final extension = (file.extension ?? '').toLowerCase();
       final mime = _mimeForExtension(extension);
-      final path = '$userId/${widget.conversationId}/${DateTime.now().millisecondsSinceEpoch}_${file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')}';
-      await supabase.storage.from('chat-media').uploadBinary(
-        path,
-        bytes,
-        fileOptions: FileOptions(contentType: mime, upsert: false),
-      );
+      final path =
+          '$userId/${widget.conversationId}/${DateTime.now().millisecondsSinceEpoch}_${file.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')}';
+      await supabase.storage
+          .from('chat-media')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(contentType: mime, upsert: false),
+          );
       await supabase.from('messages').insert({
         'conversation_id': widget.conversationId,
         'sender_id': userId,
@@ -167,7 +199,10 @@ class _ChatPageState extends State<ChatPage> {
         'mime_type': mime,
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     } finally {
       if (mounted) setState(() => uploading = false);
     }
@@ -175,10 +210,24 @@ class _ChatPageState extends State<ChatPage> {
 
   String _mimeForExtension(String ext) {
     const map = {
-      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
-      'mp4': 'video/mp4', 'mov': 'video/quicktime', 'm4v': 'video/x-m4v', 'webm': 'video/webm',
-      'mp3': 'audio/mpeg', 'm4a': 'audio/mp4', 'wav': 'audio/wav', 'aac': 'audio/aac', 'ogg': 'audio/ogg',
-      'pdf': 'application/pdf', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'm4v': 'video/x-m4v',
+      'webm': 'video/webm',
+      'mp3': 'audio/mpeg',
+      'm4a': 'audio/mp4',
+      'wav': 'audio/wav',
+      'aac': 'audio/aac',
+      'ogg': 'audio/ogg',
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     };
     return map[ext] ?? 'application/octet-stream';
   }
@@ -193,7 +242,9 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<String?> signedUrl(String path) async {
     try {
-      return await supabase.storage.from('chat-media').createSignedUrl(path, 3600);
+      return await supabase.storage
+          .from('chat-media')
+          .createSignedUrl(path, 3600);
     } catch (_) {
       return null;
     }
@@ -210,12 +261,18 @@ class _ChatPageState extends State<ChatPage> {
       try {
         setState(() => uploading = true);
         final bytes = await readRecordingBytes(path);
-        final storagePath = '$userId/${widget.conversationId}/${DateTime.now().millisecondsSinceEpoch}_voice.$recordingFileExtension';
-        await supabase.storage.from('chat-media').uploadBinary(
-          storagePath,
-          bytes,
-          fileOptions: FileOptions(contentType: recordingMimeType, upsert: false),
-        );
+        final storagePath =
+            '$userId/${widget.conversationId}/${DateTime.now().millisecondsSinceEpoch}_voice.$recordingFileExtension';
+        await supabase.storage
+            .from('chat-media')
+            .uploadBinary(
+              storagePath,
+              bytes,
+              fileOptions: FileOptions(
+                contentType: recordingMimeType,
+                upsert: false,
+              ),
+            );
         await supabase.from('messages').insert({
           'conversation_id': widget.conversationId,
           'sender_id': userId,
@@ -229,7 +286,10 @@ class _ChatPageState extends State<ChatPage> {
         });
         await deleteRecordingFile(path);
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voice note failed: $e')));
+        if (mounted)
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Voice note failed: $e')));
       } finally {
         if (mounted) setState(() => uploading = false);
       }
@@ -237,18 +297,35 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     if (!await recorder.hasPermission()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Microphone permission is required.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is required.')),
+        );
       return;
     }
-    final path = await recordingPath('gg_voice_${DateTime.now().millisecondsSinceEpoch}.$recordingFileExtension');
+    final path = await recordingPath(
+      'gg_voice_${DateTime.now().millisecondsSinceEpoch}.$recordingFileExtension',
+    );
     final encoder = kIsWeb ? AudioEncoder.wav : AudioEncoder.aacLc;
-    await recorder.start(RecordConfig(encoder: encoder, bitRate: 24000, sampleRate: 16000, numChannels: 1), path: path);
+    await recorder.start(
+      RecordConfig(
+        encoder: encoder,
+        bitRate: 24000,
+        sampleRate: 16000,
+        numChannels: 1,
+      ),
+      path: path,
+    );
     recordClock = Stopwatch()..start();
     if (mounted) setState(() => recording = true);
   }
 
   Future<void> deleteMessage(String id) async {
-    await supabase.from('messages').delete().eq('id', id).eq('sender_id', userId);
+    await supabase
+        .from('messages')
+        .delete()
+        .eq('id', id)
+        .eq('sender_id', userId);
   }
 
   void showMessageActions(Map<String, dynamic> message) {
@@ -257,26 +334,81 @@ class _ChatPageState extends State<ChatPage> {
       context: context,
       showDragHandle: true,
       builder: (_) => SafeArea(
-        child: Wrap(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: const Text('Message actions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-          ),
-          ListTile(leading: const Icon(Icons.reply_rounded), title: const Text('Reply'), onTap: () { Navigator.pop(context); setState(() => replyingTo = message); focus.requestFocus(); }),
-          ListTile(leading: const Text('❤️', style: TextStyle(fontSize: 22)), title: const Text('React ❤️'), onTap: () { Navigator.pop(context); _react(message['id'].toString(), '❤️'); }),
-          if (mine) ListTile(leading: const Icon(Icons.edit_rounded), title: const Text('Edit'), onTap: () { Navigator.pop(context); setState(() { editingId = message['id'].toString(); controller.text = message['body']?.toString() ?? ''; }); focus.requestFocus(); }),
-          if (mine) ListTile(leading: const Icon(Icons.delete_outline_rounded), title: const Text('Delete'), onTap: () { Navigator.pop(context); deleteMessage(message['id'].toString()); }),
-        ]),
+        child: Wrap(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: const Text(
+                'Message actions',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.reply_rounded),
+              title: const Text('Reply'),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => replyingTo = message);
+                focus.requestFocus();
+              },
+            ),
+            ListTile(
+              leading: const Text('❤️', style: TextStyle(fontSize: 22)),
+              title: const Text('React ❤️'),
+              onTap: () {
+                Navigator.pop(context);
+                _react(message['id'].toString(), '❤️');
+              },
+            ),
+            if (mine)
+              ListTile(
+                leading: const Icon(Icons.edit_rounded),
+                title: const Text('Edit'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    editingId = message['id'].toString();
+                    controller.text = message['body']?.toString() ?? '';
+                  });
+                  focus.requestFocus();
+                },
+              ),
+            if (mine)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded),
+                title: const Text('Delete'),
+                onTap: () {
+                  Navigator.pop(context);
+                  deleteMessage(message['id'].toString());
+                },
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _react(String id, String emoji) async {
-    final existing = await supabase.from('message_reactions').select('message_id').eq('message_id', id).eq('user_id', userId).eq('reaction', emoji).maybeSingle();
+    final existing = await supabase
+        .from('message_reactions')
+        .select('message_id')
+        .eq('message_id', id)
+        .eq('user_id', userId)
+        .eq('reaction', emoji)
+        .maybeSingle();
     if (existing == null) {
-      await supabase.from('message_reactions').insert({'message_id': id, 'user_id': userId, 'reaction': emoji});
+      await supabase.from('message_reactions').insert({
+        'message_id': id,
+        'user_id': userId,
+        'reaction': emoji,
+      });
     } else {
-      await supabase.from('message_reactions').delete().eq('message_id', id).eq('user_id', userId).eq('reaction', emoji);
+      await supabase
+          .from('message_reactions')
+          .delete()
+          .eq('message_id', id)
+          .eq('user_id', userId)
+          .eq('reaction', emoji);
     }
   }
 
@@ -290,53 +422,56 @@ class _ChatPageState extends State<ChatPage> {
         future: signedUrl(path),
         builder: (_, snapshot) => snapshot.data == null
             ? Text(name)
-            : ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(snapshot.data!, width: 250, height: 190, fit: BoxFit.cover)),
+            : ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  snapshot.data!,
+                  width: 250,
+                  height: 190,
+                  fit: BoxFit.cover,
+                ),
+              ),
       );
     }
     if (type == 'audio') {
-      return VoiceMessageBubble(path: path, durationMs: message['duration_ms'] as int?, signedUrl: signedUrl);
+      return VoiceMessageBubble(
+        path: path,
+        durationMs: message['duration_ms'] as int?,
+        signedUrl: signedUrl,
+      );
     }
     return Container(
       padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), color: Theme.of(context).colorScheme.surface.withValues(alpha: .35)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(type == 'video' ? Icons.video_file_rounded : Icons.insert_drive_file_rounded),
-        const SizedBox(width: 9),
-        Flexible(child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis)),
-      ]),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: .35),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            type == 'video'
+                ? Icons.video_file_rounded
+                : Icons.insert_drive_file_rounded,
+          ),
+          const SizedBox(width: 9),
+          Flexible(
+            child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
     );
   }
 
-  String _initial(String title) => title.trim().isEmpty ? '?' : title.trim().substring(0, 1).toUpperCase();
-
-  String _dayLabel(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final target = DateTime(date.year, date.month, date.day);
-    final difference = today.difference(target).inDays;
-    if (difference == 0) return 'Today';
-    if (difference == 1) return 'Yesterday';
-    return DateFormat('d MMMM yyyy').format(date);
-  }
-
-  Widget _dayPill(String label) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-          ),
-        ),
-      );
+  String _initial(String title) =>
+      title.trim().isEmpty ? '?' : title.trim().substring(0, 1).toUpperCase();
 
   Widget _messageBubble(Map<String, dynamic> message) {
     final mine = message['sender_id'] == userId;
     final scheme = Theme.of(context).colorScheme;
-    final created = DateTime.tryParse(message['created_at']?.toString() ?? '')?.toLocal();
+    final created = DateTime.tryParse(
+      message['created_at']?.toString() ?? '',
+    )?.toLocal();
     final type = message['message_type']?.toString() ?? 'text';
     final body = message['body']?.toString() ?? '';
     final edited = message['edited_at'] != null;
@@ -347,14 +482,29 @@ class _ChatPageState extends State<ChatPage> {
         onLongPress: () => showMessageActions(message),
         onDoubleTap: () => _react(message['id'].toString(), '❤️'),
         child: Container(
-          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .82),
-          margin: EdgeInsets.only(left: mine ? 52 : 4, right: mine ? 4 : 52, bottom: 7),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * .82,
+          ),
+          margin: EdgeInsets.only(
+            left: mine ? 52 : 4,
+            right: mine ? 4 : 52,
+            bottom: 7,
+          ),
           padding: EdgeInsets.fromLTRB(14, 10, 11, 7),
           decoration: BoxDecoration(
             gradient: mine
-                ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primaryContainer, scheme.primaryContainer.withValues(alpha: .82)])
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      scheme.primaryContainer,
+                      scheme.primaryContainer.withValues(alpha: .82),
+                    ],
+                  )
                 : null,
-            color: mine ? null : scheme.surfaceContainerHighest.withValues(alpha: .86),
+            color: mine
+                ? null
+                : scheme.surfaceContainerHighest.withValues(alpha: .86),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(19),
               topRight: const Radius.circular(19),
@@ -362,11 +512,19 @@ class _ChatPageState extends State<ChatPage> {
               bottomRight: Radius.circular(mine ? 5 : 19),
             ),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (type != 'text') mediaPreview(message) else Text(body),
-            if (type == 'text' && edited) const Text('edited', style: TextStyle(fontSize: 10)),
-            if (created != null) Text(DateFormat('HH:mm').format(created), style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant)),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (type != 'text') mediaPreview(message) else Text(body),
+              if (type == 'text' && edited)
+                const Text('edited', style: TextStyle(fontSize: 10)),
+              if (created != null)
+                Text(
+                  DateFormat('HH:mm').format(created),
+                  style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -386,72 +544,140 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(children: [
-          CircleAvatar(child: Text(_initial(widget.title))),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(typing ? 'typing…' : online ? 'online' : 'offline', style: Theme.of(context).textTheme.labelSmall),
-          ])),
-        ]),
+        title: Row(
+          children: [
+            CircleAvatar(child: Text(_initial(widget.title))),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    typing
+                        ? 'typing…'
+                        : online
+                        ? 'online'
+                        : 'offline',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(onPressed: () => _startCall(false), icon: const Icon(Icons.call_rounded)),
-          IconButton(onPressed: () => _startCall(true), icon: const Icon(Icons.videocam_rounded)),
+          IconButton(
+            onPressed: () => _startCall(false),
+            icon: const Icon(Icons.call_rounded),
+          ),
+          IconButton(
+            onPressed: () => _startCall(true),
+            icon: const Icon(Icons.videocam_rounded),
+          ),
         ],
       ),
-      body: Column(children: [
-        Expanded(
-          child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: messageStream,
-            builder: (context, snapshot) {
-              final items = snapshot.data ?? const <Map<String, dynamic>>[];
-              if (items.isEmpty) return const Center(child: Text('No messages yet.'));
-              return ListView.builder(
-                reverse: false,
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-                itemCount: items.length,
-                itemBuilder: (_, i) => _messageBubble(items[i]),
-              );
-            },
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: messageStream,
+              builder: (context, snapshot) {
+                final items = snapshot.data ?? const <Map<String, dynamic>>[];
+                if (items.isEmpty)
+                  return const Center(child: Text('No messages yet.'));
+                return ListView.builder(
+                  reverse: false,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _messageBubble(items[i]),
+                );
+              },
+            ),
           ),
-        ),
-        if (replyingTo != null) Padding(
-          padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-          child: Row(children: [
-            const Icon(Icons.reply_rounded, size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text(replyingTo?['body']?.toString() ?? 'Replying', maxLines: 1, overflow: TextOverflow.ellipsis)),
-            IconButton(onPressed: () => setState(() => replyingTo = null), icon: const Icon(Icons.close_rounded)),
-          ]),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 7, 10, 10),
-            child: Row(children: [
-              IconButton(onPressed: uploading ? null : pickAttachment, icon: const Icon(Icons.attach_file_rounded)),
-              Expanded(child: TextField(
-                controller: controller,
-                focusNode: focus,
-                minLines: 1,
-                maxLines: 5,
-                textInputAction: TextInputAction.newline,
-                onChanged: (value) => typingService.setTyping(value.trim().isNotEmpty),
-                decoration: InputDecoration(hintText: editingId == null ? 'Message' : 'Edit message', border: OutlineInputBorder(borderRadius: BorderRadius.circular(24))),
-              )),
-              IconButton(onPressed: uploading ? null : toggleRecording, icon: Icon(recording ? Icons.stop_rounded : Icons.mic_none_rounded)),
-              IconButton(onPressed: sending ? null : sendMessage, icon: const Icon(Icons.send_rounded)),
-            ]),
+          if (replyingTo != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Row(
+                children: [
+                  const Icon(Icons.reply_rounded, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      replyingTo?['body']?.toString() ?? 'Replying',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => replyingTo = null),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 7, 10, 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: uploading ? null : pickAttachment,
+                    icon: const Icon(Icons.attach_file_rounded),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      focusNode: focus,
+                      minLines: 1,
+                      maxLines: 5,
+                      textInputAction: TextInputAction.newline,
+                      onChanged: (value) =>
+                          typingService.setTyping(value.trim().isNotEmpty),
+                      decoration: InputDecoration(
+                        hintText: editingId == null
+                            ? 'Message'
+                            : 'Edit message',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: uploading ? null : toggleRecording,
+                    icon: Icon(
+                      recording ? Icons.stop_rounded : Icons.mic_none_rounded,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: sending ? null : sendMessage,
+                    icon: const Icon(Icons.send_rounded),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
 
 class VoiceMessageBubble extends StatefulWidget {
-  const VoiceMessageBubble({required this.path, required this.signedUrl, this.durationMs, super.key});
+  const VoiceMessageBubble({
+    required this.path,
+    required this.signedUrl,
+    this.durationMs,
+    super.key,
+  });
   final String path;
   final int? durationMs;
   final Future<String?> Function(String path) signedUrl;
@@ -480,12 +706,26 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
     if (url == null) return;
     await player.play(UrlSource(url));
     if (mounted) setState(() => playing = true);
-    player.onPlayerComplete.listen((_) { if (mounted) setState(() => playing = false); });
+    player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => playing = false);
+    });
   }
 
   @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(onPressed: toggle, icon: Icon(playing ? Icons.pause_circle_rounded : Icons.play_circle_rounded)),
-        Text(widget.durationMs == null ? 'Voice message' : '${(widget.durationMs! / 1000).ceil()}s'),
-      ]);
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(
+        onPressed: toggle,
+        icon: Icon(
+          playing ? Icons.pause_circle_rounded : Icons.play_circle_rounded,
+        ),
+      ),
+      Text(
+        widget.durationMs == null
+            ? 'Voice message'
+            : '${(widget.durationMs! / 1000).ceil()}s',
+      ),
+    ],
+  );
 }
