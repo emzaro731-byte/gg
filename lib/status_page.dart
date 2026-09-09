@@ -1,2 +1,5 @@
-export 'whatsapp_status_page.dart';
-export 'whatsapp_status_stories_page.dart';
+import 'whatsapp_status_page.dart';
+
+class StatusPage extends WhatsAppStatusPage {
+  const StatusPage({super.key});
+}
