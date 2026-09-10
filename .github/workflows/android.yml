@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-android:
-    name: Build GG Messenger Android
+    name: Build GG Messenger APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -162,16 +162,10 @@ jobs:
         run: flutter build apk --release --dart-define=dart.library.io.force_staggered_ipv6_lookup=true
       - name: Verify APK
         run: test -s build/app/outputs/flutter-apk/app-release.apk
-      - name: Build release AAB
-        run: flutter build appbundle --release --dart-define=dart.library.io.force_staggered_ipv6_lookup=true
-      - name: Verify AAB
-        run: test -s build/app/outputs/bundle/release/app-release.aab
-      - name: Publish Android artifacts
+      - name: Publish APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GG-Messenger-Android
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: GG-Messenger-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
