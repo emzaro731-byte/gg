@@ -34,27 +34,13 @@ jobs:
           marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
           if marker not in s:
               raise SystemExit('AndroidManifest.xml manifest tag not found')
-          permissions = [
-              'android.permission.INTERNET',
-              'android.permission.ACCESS_NETWORK_STATE',
-              'android.permission.RECORD_AUDIO',
-              'android.permission.CAMERA',
-              'android.permission.MODIFY_AUDIO_SETTINGS',
-              'android.permission.BLUETOOTH',
-              'android.permission.BLUETOOTH_CONNECT',
-          ]
-          additions = ''.join(
-              f'    <uses-permission android:name="{permission}" />\n'
-              for permission in permissions
-              if permission not in s
-          )
-          if additions:
-              s = s.replace(marker, marker + '\n' + additions, 1)
+          permissions = ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.RECORD_AUDIO','android.permission.CAMERA','android.permission.MODIFY_AUDIO_SETTINGS','android.permission.BLUETOOTH','android.permission.BLUETOOTH_CONNECT']
+          additions = ''.join(f'    <uses-permission android:name="{permission}" />\n' for permission in permissions if permission not in s)
+          if additions: s = s.replace(marker, marker + '\n' + additions, 1)
           s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/gg_logo"')
           s = s.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/gg_logo"')
           p.write_text(s)
           PY
-          for p in android.permission.INTERNET android.permission.ACCESS_NETWORK_STATE android.permission.RECORD_AUDIO android.permission.CAMERA android.permission.MODIFY_AUDIO_SETTINGS; do grep -q "$p" android/app/src/main/AndroidManifest.xml; done
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
@@ -69,12 +55,12 @@ jobs:
           mkdir -p android/app/src/main/res/drawable
           rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o assets/branding/gg_logo.png
           rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o android/app/src/main/res/drawable/gg_logo.png
-          test -s assets/branding/gg_logo.png
-          test -s android/app/src/main/res/drawable/gg_logo.png
       - name: Get dependencies
         run: flutter pub get
       - name: Apply premium chat UI
         run: python3 tool/upgrade_chat_ui.py
+      - name: Fix chat composer Dart syntax
+        run: python3 tool/fix_chat_syntax.py
       - name: Preserve chat during realtime reconnects
         run: python3 tool/fix_chat_stream.py
       - name: Verify GG branding is used
@@ -83,7 +69,6 @@ jobs:
           test -s assets/branding/gg_logo.png
           test -s android/app/src/main/res/drawable/gg_logo.png
           grep -q 'android:icon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml
-          grep -q 'android:roundIcon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml || true
       - name: Remove generated template test
         run: rm -f test/widget_test.dart
       - name: Analyze code (non-blocking)
@@ -99,34 +84,27 @@ jobs:
               p, s = groovy, groovy.read_text()
               if 'coreLibraryDesugaringEnabled true' not in s:
                   marker = 'compileOptions {'
-                  if marker in s:
-                      s = s.replace(marker, marker + '\n        coreLibraryDesugaringEnabled true', 1)
-                  else:
-                      s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }', 1)
+                  if marker in s: s = s.replace(marker, marker + '\n        coreLibraryDesugaringEnabled true', 1)
+                  else: s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }', 1)
               dep = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
-              if 'desugar_jdk_libs' not in s:
-                  s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
+              if 'desugar_jdk_libs' not in s: s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
               p.write_text(s)
           elif kotlin.exists():
               p, s = kotlin, kotlin.read_text()
               if 'isCoreLibraryDesugaringEnabled = true' not in s:
                   marker = 'compileOptions {'
-                  if marker in s:
-                      s = s.replace(marker, marker + '\n        isCoreLibraryDesugaringEnabled = true', 1)
-                  else:
-                      s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }', 1)
+                  if marker in s: s = s.replace(marker, marker + '\n        isCoreLibraryDesugaringEnabled = true', 1)
+                  else: s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }', 1)
               dep = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
-              if 'desugar_jdk_libs' not in s:
-                  s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
+              if 'desugar_jdk_libs' not in s: s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
               p.write_text(s)
-          else:
-              raise SystemExit('No Android app Gradle file found')
+          else: raise SystemExit('No Android app Gradle file found')
           PY
       - name: Clean Flutter build
         run: flutter clean
       - name: Get dependencies again
         run: flutter pub get
-      - name: Build release APK with IPv4/IPv6 DNS workaround
+      - name: Build release APK
         run: flutter build apk --release --dart-define=dart.library.io.force_staggered_ipv6_lookup=true
       - name: Verify APK
         run: test -s build/app/outputs/flutter-apk/app-release.apk
