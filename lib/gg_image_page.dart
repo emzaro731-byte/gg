@@ -1,5 +1,9 @@
+import 'dart:convert';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:video_player/video_player.dart';
 
 class GgImagePage extends StatefulWidget {
   const GgImagePage({super.key});
@@ -10,330 +14,310 @@ class GgImagePage extends StatefulWidget {
 
 class _GgImagePageState extends State<GgImagePage> {
   final promptController = TextEditingController();
-  String model = 'flux-schnell';
+  final modelController = TextEditingController(text: 'kling-3.0');
+  final imageUrlController = TextEditingController();
+  final titleController = TextEditingController(text: 'GG AI Creation');
+  final styleController = TextEditingController();
+  final advancedController = TextEditingController();
+  final AudioPlayer audioPlayer = AudioPlayer();
+
+  String type = 'image';
+  String provider = 'kie';
   String aspectRatio = '1:1';
+  bool instrumental = false;
   bool generating = false;
-  String? imageUrl;
+  bool audioPlaying = false;
+  String? outputUrl;
+  String? taskId;
   String? error;
-  int? creditsCharged;
+  VideoPlayerController? videoController;
 
   SupabaseClient get supabase => Supabase.instance.client;
+
+  static const _presets = <String, List<Map<String, String>>>{
+    'Image': [
+      {'name': 'Seedream 5.0 Pro', 'id': 'seedream/5.0-pro'},
+      {'name': 'Seedream 4.5', 'id': 'seedream/4.5'},
+      {'name': 'Google Imagen 4', 'id': 'google/imagen4'},
+      {'name': 'Google Imagen 4 Ultra', 'id': 'google/imagen4-ultra'},
+      {'name': 'Flux 2 Pro', 'id': 'flux-2/pro'},
+      {'name': 'Grok Imagine', 'id': 'grok-imagine'},
+      {'name': 'GPT Image 2', 'id': 'gpt-image-2'},
+      {'name': 'Ideogram V3', 'id': 'ideogram-v3'},
+      {'name': 'Qwen Image', 'id': 'qwen-image'},
+    ],
+    'Video': [
+      {'name': 'Kling 3.0', 'id': 'kling-3.0'},
+      {'name': 'Kling 2.6', 'id': 'kling-2.6/text-to-video'},
+      {'name': 'Kling 3.0 Turbo', 'id': 'kling-3.0/turbo-text-to-video'},
+      {'name': 'Seedance 2.0', 'id': 'bytedance/seedance-2.0'},
+      {'name': 'Seedance 2.0 Fast', 'id': 'bytedance/seedance-2.0-fast'},
+      {'name': 'Seedance 1.5 Pro', 'id': 'bytedance/seedance-1.5-pro'},
+      {'name': 'Hailuo 2.3 Pro', 'id': 'hailuo/2.3-pro'},
+      {'name': 'Wan 2.7', 'id': 'wan/2.7-text-to-video'},
+      {'name': 'Wan 2.6', 'id': 'wan/2.6-text-to-video'},
+      {'name': 'Grok Imagine Video', 'id': 'grok-imagine-video'},
+      {'name': 'Veo 3.1 Fast', 'id': 'veo3/veo-3.1-fast'},
+      {'name': 'Veo 3.1 Quality', 'id': 'veo3/veo-3.1-quality'},
+      {'name': 'Runway', 'id': 'runway'},
+      {'name': 'PixVerse V6', 'id': 'pixverse/v6'},
+    ],
+    'Music': [
+      {'name': 'Suno V5.5', 'id': 'V5_5'},
+      {'name': 'Suno V5', 'id': 'V5'},
+      {'name': 'Suno V4.5+', 'id': 'V4_5PLUS'},
+      {'name': 'Suno V4.5', 'id': 'V4_5'},
+      {'name': 'Suno V4.5 All', 'id': 'V4_5ALL'},
+      {'name': 'Suno V4', 'id': 'V4'},
+      {'name': 'Suno V3.5', 'id': 'V3_5'},
+    ],
+  };
 
   @override
   void dispose() {
     promptController.dispose();
+    modelController.dispose();
+    imageUrlController.dispose();
+    titleController.dispose();
+    styleController.dispose();
+    advancedController.dispose();
+    audioPlayer.dispose();
+    videoController?.dispose();
     super.dispose();
+  }
+
+  void _setType(String value) {
+    setState(() {
+      type = value;
+      modelController.text = _presets[value]!.first['id']!;
+      outputUrl = null;
+      taskId = null;
+      error = null;
+      if (value == 'image') aspectRatio = '1:1';
+      if (value == 'video') aspectRatio = '16:9';
+    });
+  }
+
+  void _selectPreset(String id) => setState(() => modelController.text = id);
+
+  Map<String, dynamic> _input() {
+    Map<String, dynamic> input = {};
+    final raw = advancedController.text.trim();
+    if (raw.isNotEmpty) {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) throw const FormatException('Advanced input must be a JSON object.');
+      input = Map<String, dynamic>.from(decoded);
+    }
+    if (type == 'video') {
+      input['aspectRatio'] = aspectRatio;
+      if (imageUrlController.text.trim().isNotEmpty) input['imageUrl'] = imageUrlController.text.trim();
+    }
+    if (type == 'image') input['aspect_ratio'] = aspectRatio;
+    if (type == 'music') {
+      input['customMode'] = true;
+      input['instrumental'] = instrumental;
+      input['title'] = titleController.text.trim();
+      input['style'] = styleController.text.trim();
+      input['prompt'] = promptController.text.trim();
+    }
+    return input;
   }
 
   Future<void> _generate() async {
     final prompt = promptController.text.trim();
-    if (prompt.isEmpty || generating) return;
-
+    final model = modelController.text.trim();
+    if (generating || model.isEmpty || (prompt.isEmpty && type != 'music')) return;
     final session = supabase.auth.currentSession;
     if (session == null) {
-      setState(
-        () => error = 'Please sign in to GG before generating an image.',
-      );
+      setState(() => error = 'Please sign in to GG before generating media.');
       return;
     }
-
     FocusScope.of(context).unfocus();
     setState(() {
       generating = true;
       error = null;
-      imageUrl = null;
-      creditsCharged = null;
+      outputUrl = null;
+      taskId = null;
     });
-
     try {
-      final response = await supabase.functions.invoke(
-        'gg-image-generate',
-        body: {
-          'prompt': prompt,
-          'model': model,
-          'aspect_ratio': aspectRatio,
-          'resolution': '640px',
-          'image_count': 1,
-        },
-      );
-
+      final response = await supabase.functions.invoke('gg-media-generate', body: {
+        'provider': provider,
+        'type': type,
+        'model': model,
+        'prompt': prompt,
+        'input': _input(),
+      });
       final data = response.data;
-      if (data is! Map) {
-        throw Exception('Invalid response from GG Image.');
-      }
-
+      if (data is! Map) throw Exception('Invalid response from GG media service.');
       final returnedError = data['error']?.toString();
-      final url = data['image_url']?.toString();
-
+      final url = data['output_url']?.toString();
+      final returnedTask = data['task_id']?.toString();
       if (url == null || url.isEmpty) {
-        throw Exception(returnedError ?? 'Magic Hour did not return an image.');
+        if (returnedTask == null || returnedTask.isEmpty) throw Exception(returnedError ?? 'The provider returned no output.');
+        taskId = returnedTask;
+        await _pollTask(returnedTask);
+      } else {
+        outputUrl = url;
+        await _prepareVideo(url);
       }
-
-      if (!mounted) return;
-      setState(() {
-        imageUrl = url;
-        creditsCharged = int.tryParse(
-          data['credits_charged']?.toString() ?? '',
-        );
-      });
     } on FunctionException catch (e) {
-      if (!mounted) return;
       final details = e.details;
-      String message = 'Magic Hour request failed.';
-      if (details is Map && details['error'] != null) {
-        message = details['error'].toString();
-      } else if (details != null) {
-        message = details.toString();
-      } else if (e.reasonPhrase != null && e.reasonPhrase!.isNotEmpty) {
-        message = e.reasonPhrase!;
-      }
-      setState(() => error = message);
+      String message = 'Media generation failed.';
+      if (details is Map && details['error'] != null) message = details['error'].toString();
+      else if (details != null) message = details.toString();
+      else if (e.reasonPhrase?.isNotEmpty == true) message = e.reasonPhrase!;
+      if (mounted) setState(() => error = message);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        error = e.toString().replaceFirst('Exception: ', '');
-      });
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => generating = false);
     }
   }
 
-  void _clear() {
-    if (generating) return;
-    setState(() {
-      promptController.clear();
-      imageUrl = null;
-      error = null;
-      creditsCharged = null;
+  Future<void> _pollTask(String id) async {
+    for (var attempt = 0; attempt < 60; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+      final response = await supabase.functions.invoke('gg-media-generate', body: {
+        'action': 'status',
+        'provider': 'kie',
+        'task_id': id,
+      });
+      final data = response.data;
+      if (data is! Map) continue;
+      final url = data['output_url']?.toString();
+      final responseData = data['data'];
+      final successFlag = data['successFlag'] ?? (responseData is Map ? responseData['successFlag'] : null);
+      final status = data['status']?.toString() ?? (responseData is Map ? responseData['status']?.toString() : null);
+      if (url != null && url.isNotEmpty) {
+        setState(() => outputUrl = url);
+        await _prepareVideo(url);
+        return;
+      }
+      if (successFlag == 2 || status == 'failed' || status == 'error') throw Exception(data['errorMessage']?.toString() ?? 'KIE generation failed.');
+      if (successFlag == 1) {
+        final nested = responseData is Map ? responseData['response'] : null;
+        final nestedUrl = nested is Map ? (nested['resultUrls'] is List && nested['resultUrls'].isNotEmpty ? nested['resultUrls'].first.toString() : null) : null;
+        if (nestedUrl != null && nestedUrl.isNotEmpty) {
+          setState(() => outputUrl = nestedUrl);
+          await _prepareVideo(nestedUrl);
+          return;
+        }
+      }
+    }
+    throw Exception('Generation is still processing. Task ID: $id');
+  }
+
+  Future<void> _prepareVideo(String url) async {
+    if (type != 'video') return;
+    final old = videoController;
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    videoController = controller;
+    await old?.dispose();
+    await controller.initialize();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _playAudio() async {
+    final url = outputUrl;
+    if (url == null) return;
+    if (audioPlaying) {
+      await audioPlayer.pause();
+      setState(() => audioPlaying = false);
+      return;
+    }
+    await audioPlayer.play(UrlSource(url));
+    setState(() => audioPlaying = true);
+    audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => audioPlaying = false);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final imageAspect = aspectRatio == '16:9'
-        ? 16 / 9
-        : aspectRatio == '9:16'
-        ? 9 / 16
-        : 1.0;
-
+    final presets = _presets[type == 'image' ? 'Image' : type == 'video' ? 'Video' : 'Music']!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'GG Image',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Clear',
-            onPressed: generating ? null : _clear,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
+        title: const Text('GG Create', style: TextStyle(fontWeight: FontWeight.w900)),
+        actions: [IconButton(onPressed: generating ? null : () => setState(() { promptController.clear(); outputUrl = null; error = null; }), icon: const Icon(Icons.refresh_rounded))],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [scheme.primaryContainer, scheme.secondaryContainer],
-              ),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.auto_awesome_rounded, size: 34),
-                SizedBox(height: 10),
-                Text(
-                  'Create with GG',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Describe an image and Magic Hour will generate it for you.',
-                ),
-              ],
-            ),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primaryContainer, scheme.secondaryContainer]), borderRadius: BorderRadius.circular(28)),
+            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.auto_awesome_rounded, size: 36),
+              SizedBox(height: 8),
+              Text('Create anything', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+              SizedBox(height: 4),
+              Text('Images, videos and music through KIE or your existing AI API.'),
+            ]),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
+          SegmentedButton<String>(segments: const [
+            ButtonSegment(value: 'image', label: Text('Image'), icon: Icon(Icons.image_rounded)),
+            ButtonSegment(value: 'video', label: Text('Video'), icon: Icon(Icons.movie_creation_rounded)),
+            ButtonSegment(value: 'music', label: Text('Music'), icon: Icon(Icons.music_note_rounded)),
+          ], selected: {type}, onSelectionChanged: generating ? null : (s) => _setType(s.first)),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            initialValue: provider,
+            decoration: const InputDecoration(labelText: 'Provider'),
+            items: const [
+              DropdownMenuItem(value: 'kie', child: Text('KIE — all supported KIE models')),
+              DropdownMenuItem(value: 'existing-api', child: Text('Existing GG AI API')),
+            ],
+            onChanged: generating ? null : (v) => setState(() => provider = v ?? 'kie'),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: presets.any((p) => p['id'] == modelController.text) ? modelController.text : null,
+            decoration: const InputDecoration(labelText: 'KIE model presets'),
+            hint: const Text('Choose a model or enter any KIE model ID below'),
+            items: presets.map((p) => DropdownMenuItem(value: p['id'], child: Text(p['name']!))).toList(),
+            onChanged: generating ? null : (v) { if (v != null) _selectPreset(v); },
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: modelController, decoration: const InputDecoration(labelText: 'Model ID', hintText: 'Any current KIE model ID')), 
+          const SizedBox(height: 12),
           TextField(
             controller: promptController,
             minLines: 4,
             maxLines: 8,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-              labelText: 'Image prompt',
-              hintText:
-                  'A futuristic Port Harcourt skyline at sunset, cinematic lighting…',
-              alignLabelWithHint: true,
-              prefixIcon: const Padding(
-                padding: EdgeInsets.only(bottom: 58),
-                child: Icon(Icons.edit_rounded),
-              ),
-              filled: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: BorderSide.none,
-              ),
-            ),
+            decoration: InputDecoration(labelText: type == 'music' ? 'Song prompt / lyrics' : 'Prompt', hintText: type == 'video' ? 'A cinematic futuristic Lagos night drive…' : type == 'music' ? 'High-energy Nigerian Afrobeats, infectious drums, rich vocals…' : 'A futuristic Nigerian city at night…', alignLabelWithHint: true),
           ),
+          if (type == 'music') ...[
+            const SizedBox(height: 12),
+            TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Song title')),
+            const SizedBox(height: 12),
+            TextField(controller: styleController, maxLines: 3, decoration: const InputDecoration(labelText: 'Style / genre', hintText: 'Afrobeats, Afro-fusion, cinematic…')),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Instrumental'), value: instrumental, onChanged: generating ? null : (v) => setState(() => instrumental = v)),
+          ],
+          if (type == 'video') ...[
+            const SizedBox(height: 12),
+            TextField(controller: imageUrlController, decoration: const InputDecoration(labelText: 'Reference image URL (optional)')),
+          ],
+          if (type != 'music') ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(initialValue: aspectRatio, decoration: const InputDecoration(labelText: 'Aspect ratio'), items: const [DropdownMenuItem(value: '1:1', child: Text('1:1')), DropdownMenuItem(value: '16:9', child: Text('16:9')), DropdownMenuItem(value: '9:16', child: Text('9:16'))], onChanged: generating ? null : (v) => setState(() => aspectRatio = v ?? aspectRatio)),
+          ],
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: model,
-                  decoration: InputDecoration(
-                    labelText: 'Model',
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'flux-schnell',
-                      child: Text('FLUX Schnell'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'flux-2-klein',
-                      child: Text('FLUX 2 Klein'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'z-image-turbo',
-                      child: Text('Z-Image Turbo'),
-                    ),
-                  ],
-                  onChanged: generating
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            setState(() => model = value);
-                          }
-                        },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: aspectRatio,
-                  decoration: InputDecoration(
-                    labelText: 'Ratio',
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: '1:1', child: Text('Square 1:1')),
-                    DropdownMenuItem(
-                      value: '16:9',
-                      child: Text('Landscape 16:9'),
-                    ),
-                    DropdownMenuItem(
-                      value: '9:16',
-                      child: Text('Portrait 9:16'),
-                    ),
-                  ],
-                  onChanged: generating
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            setState(() => aspectRatio = value);
-                          }
-                        },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 54,
-            child: FilledButton.icon(
-              onPressed: generating ? null : _generate,
-              icon: generating
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.image_rounded),
-              label: Text(generating ? 'Creating image…' : 'Generate Image'),
-            ),
-          ),
-          if (generating) ...[
-            const SizedBox(height: 14),
-            const Center(
-              child: Text(
-                'Magic Hour is creating your image. This can take a little while…',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-          if (error != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: scheme.errorContainer,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    color: scheme.onErrorContainer,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      error!,
-                      style: TextStyle(color: scheme.onErrorContainer),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (imageUrl != null) ...[
+          ExpansionTile(title: const Text('Advanced KIE input'), subtitle: const Text('Optional JSON for model-specific parameters'), children: [Padding(padding: const EdgeInsets.fromLTRB(0, 0, 0, 12), child: TextField(controller: advancedController, minLines: 3, maxLines: 10, decoration: const InputDecoration(hintText: '{"duration": 5, "quality": "1080p"}')))]),
+          const SizedBox(height: 12),
+          SizedBox(height: 54, child: FilledButton.icon(onPressed: generating ? null : _generate, icon: generating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(type == 'image' ? Icons.image_rounded : type == 'video' ? Icons.movie_rounded : Icons.music_note_rounded), label: Text(generating ? 'Generating…' : 'Generate ${type[0].toUpperCase()}${type.substring(1)}'))),
+          if (generating) ...[const SizedBox(height: 12), const Center(child: Text('KIE is processing your creation. Please keep GG open.'))],
+          if (taskId != null) Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText('Task: $taskId', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall)),
+          if (error != null) ...[const SizedBox(height: 14), Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(18)), child: Text(error!, style: TextStyle(color: scheme.onErrorContainer)))],
+          if (outputUrl != null) ...[
             const SizedBox(height: 18),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: AspectRatio(
-                aspectRatio: imageAspect,
-                child: Image.network(
-                  imageUrl!,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const Center(child: CircularProgressIndicator());
-                  },
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: scheme.surfaceContainerHighest,
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.all(20),
-                    child: const Text(
-                      'The image was generated, but the image URL could not be displayed.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              creditsCharged == null
-                  ? 'Generated by Magic Hour'
-                  : 'Magic Hour credits used: $creditsCharged',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            if (type == 'image') ClipRRect(borderRadius: BorderRadius.circular(24), child: Image.network(outputUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Padding(padding: EdgeInsets.all(20), child: Text('Generated image URL could not be displayed.')))),
+            if (type == 'video' && videoController?.value.isInitialized == true) ClipRRect(borderRadius: BorderRadius.circular(24), child: AspectRatio(aspectRatio: videoController!.value.aspectRatio, child: Stack(alignment: Alignment.center, children: [VideoPlayer(videoController!), IconButton.filled(onPressed: () => setState(() { videoController!.value.isPlaying ? videoController!.pause() : videoController!.play(); }), icon: Icon(videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow, size: 34))]))),
+            if (type == 'music') SizedBox(height: 70, child: FilledButton.icon(onPressed: _playAudio, icon: Icon(audioPlaying ? Icons.pause : Icons.play_arrow), label: Text(audioPlaying ? 'Pause music' : 'Play music'))),
+            const SizedBox(height: 10),
+            SelectableText(outputUrl!, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
       ),
