@@ -12,13 +12,13 @@ function jsonResponse(body: unknown, status = 200) { return new Response(JSON.st
 function clean(value: unknown, max = 12000): string { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
 function safeObject(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function outputUrl(data: any): string | null {
+  const suno = data?.data?.response?.sunoData;
+  if (Array.isArray(suno)) for (const track of suno) if (typeof track?.audio_url === "string" && track.audio_url.startsWith("http")) return track.audio_url;
   const candidates = [data?.data?.response?.resultUrls?.[0], data?.data?.response?.resultUrl, data?.data?.response?.videoUrl, data?.data?.response?.audioUrl, data?.data?.response?.imageUrl, data?.data?.resultUrls?.[0], data?.data?.resultUrl, data?.data?.videoUrl, data?.data?.audioUrl, data?.data?.imageUrl, data?.data?.url, data?.url, data?.data?.response?.result?.[0]];
   for (const value of candidates) if (typeof value === "string" && value.startsWith("http")) return value;
   return null;
 }
-async function kieFetch(path: string, init: RequestInit = {}) {
-  return fetch(`${KIE_BASE_URL}${path}`, { ...init, headers: { "Authorization": `Bearer ${KIE_API_KEY}`, "Content-Type": "application/json", ...(init.headers || {}) } });
-}
+async function kieFetch(path: string, init: RequestInit = {}) { return fetch(`${KIE_BASE_URL}${path}`, { ...init, headers: { "Authorization": `Bearer ${KIE_API_KEY}`, "Content-Type": "application/json", ...(init.headers || {}) } }); }
 async function createKie(type: string, model: string, prompt: string, input: Record<string, unknown>) {
   if (type === "music") {
     const customMode = input.customMode !== false;
@@ -50,9 +50,11 @@ serve(async (req) => {
     const provider = clean(body?.provider, 30) || "kie";
     if (action === "status") {
       const taskId = clean(body?.task_id, 300);
+      const type = clean(body?.type, 30);
       if (!taskId) return jsonResponse({ error: "task_id is required." }, 400);
       if (provider !== "kie" || !KIE_API_KEY) return jsonResponse({ error: "KIE task status requires KIE_API_KEY." }, 503);
-      const response = await kieFetch(`/api/v1/jobs/getTaskDetails?taskId=${encodeURIComponent(taskId)}`);
+      const path = type === "music" ? `/api/v1/generate/record-info?taskId=${encodeURIComponent(taskId)}` : `/api/v1/jobs/getTaskDetails?taskId=${encodeURIComponent(taskId)}`;
+      const response = await kieFetch(path);
       const raw = await response.text(); let data: any = null; try { data = JSON.parse(raw); } catch (_) {}
       if (!response.ok) return jsonResponse({ error: data?.msg || data?.error?.message || raw || `KIE status returned HTTP ${response.status}.` }, response.status);
       return jsonResponse({ ...data, output_url: outputUrl(data), user_id: user.id });
@@ -64,7 +66,6 @@ serve(async (req) => {
     if (!["image", "video", "music"].includes(type)) return jsonResponse({ error: "type must be image, video, or music." }, 400);
     if (!prompt && type !== "music") return jsonResponse({ error: "A prompt is required." }, 400);
     if (!model) return jsonResponse({ error: "A model is required." }, 400);
-
     if (provider === "kie") {
       if (!KIE_API_KEY) return jsonResponse({ error: "KIE is not configured. Add KIE_API_KEY to Supabase Edge Function secrets." }, 503);
       const { response, endpoint } = await createKie(type, model, prompt, input);
@@ -74,7 +75,6 @@ serve(async (req) => {
       const url = outputUrl(data);
       return jsonResponse({ provider: "kie", type, model, task_id: taskId || null, output_url: url, response: data, endpoint, user_id: user.id });
     }
-
     if (provider === "existing-api") {
       if (!AI_API_URL || !AI_API_KEY) return jsonResponse({ error: "Existing AI API is not configured." }, 503);
       const endpoint = type === "image" ? "/v1/images/generations" : type === "video" ? "/v1/videos/generations" : "/v1/audio/generations";
