@@ -29,6 +29,9 @@ jobs:
       - name: Create Android platform
         run: flutter create --platforms=android --project-name gg_messenger .
 
+      - name: Remove generated template test
+        run: rm -f test/widget_test.dart
+
       - name: Get dependencies
         run: flutter pub get
 
