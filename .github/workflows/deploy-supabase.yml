@@ -45,6 +45,12 @@ jobs:
       - name: Deploy GG AI
         run: supabase functions deploy gg-ai-chat --no-verify-jwt
 
+      - name: Deploy GG Image
+        run: supabase functions deploy gg-image-generate --no-verify-jwt
+
+      - name: Deploy GG Media Gateway
+        run: supabase functions deploy gg-media-generate --no-verify-jwt
+
       - name: Deploy call push
         run: supabase functions deploy send-call-push
 
@@ -53,3 +59,15 @@ jobs:
         run: |
           test -n "${{ secrets.GROQ_API_KEY }}" || { echo 'Missing GitHub secret: GROQ_API_KEY'; exit 1; }
           supabase secrets set GROQ_API_KEY='${{ secrets.GROQ_API_KEY }}' GROQ_MODEL='openai/gpt-oss-120b'
+
+      - name: Configure optional KIE secret
+        shell: bash
+        env:
+          KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
+        run: |
+          if [ -n "$KIE_API_KEY" ]; then
+            supabase secrets set KIE_API_KEY="$KIE_API_KEY"
+            echo 'KIE_API_KEY configured.'
+          else
+            echo 'KIE_API_KEY is not configured yet. GG Media will show a clear setup error until the GitHub secret is added.'
+          fi
