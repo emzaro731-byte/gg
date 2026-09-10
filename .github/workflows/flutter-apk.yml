@@ -50,6 +50,100 @@ jobs:
       - name: Analyze Flutter project
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Enable Android core library desugaring
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          groovy = Path("android/app/build.gradle")
+          kotlin = Path("android/app/build.gradle.kts")
+
+          if groovy.exists():
+              p = groovy
+              s = p.read_text()
+
+              if "coreLibraryDesugaringEnabled true" not in s:
+                  marker = "compileOptions {"
+                  if marker in s:
+                      s = s.replace(
+                          marker,
+                          marker + "\n        coreLibraryDesugaringEnabled true",
+                          1,
+                      )
+                  else:
+                      android_marker = "android {"
+                      if android_marker not in s:
+                          raise SystemExit("Could not find android { block in build.gradle")
+                      s = s.replace(
+                          android_marker,
+                          android_marker + "\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }",
+                          1,
+                      )
+
+              dependency = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
+              if "desugar_jdk_libs" not in s:
+                  if "dependencies {" in s:
+                      s = s.replace("dependencies {", "dependencies {\n    " + dependency, 1)
+                  else:
+                      s += "\n\ndependencies {\n    " + dependency + "\n}\n"
+
+              p.write_text(s)
+              print("Patched android/app/build.gradle")
+
+          elif kotlin.exists():
+              p = kotlin
+              s = p.read_text()
+
+              if "isCoreLibraryDesugaringEnabled = true" not in s:
+                  marker = "compileOptions {"
+                  if marker in s:
+                      s = s.replace(
+                          marker,
+                          marker + "\n        isCoreLibraryDesugaringEnabled = true",
+                          1,
+                      )
+                  else:
+                      android_marker = "android {"
+                      if android_marker not in s:
+                          raise SystemExit("Could not find android { block in build.gradle.kts")
+                      s = s.replace(
+                          android_marker,
+                          android_marker + "\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }",
+                          1,
+                      )
+
+              dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+              if "desugar_jdk_libs" not in s:
+                  if "dependencies {" in s:
+                      s = s.replace("dependencies {", "dependencies {\n    " + dependency, 1)
+                  else:
+                      s += "\n\ndependencies {\n    " + dependency + "\n}\n"
+
+              p.write_text(s)
+              print("Patched android/app/build.gradle.kts")
+
+          else:
+              raise SystemExit("No android/app/build.gradle or build.gradle.kts found")
+          PY
+
+      - name: Show Android desugaring configuration
+        run: |
+          if [ -f android/app/build.gradle ]; then
+            echo "===== android/app/build.gradle ====="
+            grep -n -A8 -B3 "coreLibraryDesugaring\|desugar_jdk_libs" android/app/build.gradle || true
+          fi
+          if [ -f android/app/build.gradle.kts ]; then
+            echo "===== android/app/build.gradle.kts ====="
+            grep -n -A8 -B3 "isCoreLibraryDesugaringEnabled\|desugar_jdk_libs" android/app/build.gradle.kts || true
+          fi
+
+      - name: Clean Flutter build
+        run: flutter clean
+
+      - name: Get Flutter dependencies again
+        run: flutter pub get
+
       - name: Build release APK directly
         run: flutter build apk --release
 
