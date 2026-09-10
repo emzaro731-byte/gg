@@ -70,6 +70,8 @@ jobs:
         run: flutter pub get
       - name: Apply premium chat UI
         run: python3 tool/upgrade_chat_ui.py
+      - name: Preserve chat during realtime reconnects
+        run: python3 tool/fix_chat_stream.py
       - name: Generate GG launcher icon
         run: dart run flutter_launcher_icons
       - name: Verify Android network, call permissions and launcher configuration
