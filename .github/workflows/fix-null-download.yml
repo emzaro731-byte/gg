@@ -1,0 +1,40 @@
+name: Fix nullable file saver build error
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/gg_image_page.dart'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message != 'fix: handle nullable file saver path [skip ci]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix nullable saved path
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/gg_image_page.dart')
+          s = p.read_text()
+          old = 'if (saved.isEmpty) setState(() => error = \'The download was handed to Android, but the saved path was not returned. Check Downloads.\');'
+          new = 'if (saved?.isEmpty == true) setState(() => error = \'The download was handed to Android, but the saved path was not returned. Check Downloads.\');'
+          if old not in s:
+              raise SystemExit('Expected nullable FileSaver expression was not found.')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/gg_image_page.dart
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: handle nullable file saver path [skip ci]'
+          git push
