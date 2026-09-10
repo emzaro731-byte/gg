@@ -3,3 +3,9 @@
 
 [functions.gg-ai-chat]
 verify_jwt = false
+
+[functions.gg-image-generate]
+verify_jwt = false
+
+[functions.gg-media-generate]
+verify_jwt = false
