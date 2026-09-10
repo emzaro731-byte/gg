@@ -271,7 +271,9 @@ class _GgImagePageState extends State<GgImagePage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved to your phone: $fileName')));
-        if (saved.isEmpty) setState(() => error = 'The download was handed to Android, but the saved path was not returned. Check Downloads.');
+        if (saved == null || saved.isEmpty) {
+          setState(() => error = 'The download was handed to Android, but the saved path was not returned. Check Downloads.');
+        }
       }
     } on FunctionException catch (e) {
       final details = e.details;
