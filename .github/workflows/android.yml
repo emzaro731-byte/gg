@@ -24,7 +24,7 @@ jobs:
           cache: true
       - name: Create Android platform if missing
         run: if [ ! -d android ]; then flutter create --platforms=android --project-name gg_messenger .; fi
-      - name: Configure Android permissions and use GG logo as app icon
+      - name: Configure Android permissions and use committed GG icon
         shell: bash
         run: |
           python3 - <<'PY'
@@ -47,9 +47,9 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: Install committed GG branding
+      - name: Install committed GG icon
         run: |
-          test -s assets/branding/gg_logo.png
+          test -s assets/branding/gg_logo.svg
           test -s assets/branding/gg_logo_icon.png
           mkdir -p android/app/src/main/res/drawable
           cp assets/branding/gg_logo_icon.png android/app/src/main/res/drawable/gg_logo.png
@@ -63,7 +63,7 @@ jobs:
         run: python3 tool/fix_chat_stream.py
       - name: Verify committed GG branding is used
         run: |
-          test -s assets/branding/gg_logo.png
+          test -s assets/branding/gg_logo.svg
           test -s assets/branding/gg_logo_icon.png
           test -s android/app/src/main/res/drawable/gg_logo.png
           grep -q 'android:icon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml
