@@ -45,6 +45,9 @@ jobs:
       - name: Deploy GG AI
         run: supabase functions deploy gg-ai-chat --no-verify-jwt
 
+      - name: Deploy call push
+        run: supabase functions deploy send-call-push
+
       - name: Configure GG AI secrets
         shell: bash
         run: |
