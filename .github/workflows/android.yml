@@ -23,7 +23,60 @@ jobs:
           flutter-version: '3.47.2'
           cache: true
       - name: Create Android platform if missing
-        run: if [ ! -d android ]; then flutter create --platforms=android --project-name gg_messenger .; fi
+        run: |
+          if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
+            flutter create --platforms=android --project-name gg_messenger .
+          fi
+      - name: Install Firebase Android config
+        run: test -s android/app/google-services.json
+      - name: Configure Google Services Gradle plugin
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          settings = Path('android/settings.gradle')
+          settings_kts = Path('android/settings.gradle.kts')
+          if settings.exists():
+              p, s = settings, settings.read_text()
+              if 'com.google.gms.google-services' not in s:
+                  marker = 'plugins {\n'
+                  if marker not in s:
+                      raise SystemExit('settings.gradle plugins block not found')
+                  s = s.replace(marker, marker + '    id "com.google.gms.google-services" version "4.4.3" apply false\n', 1)
+              p.write_text(s)
+          elif settings_kts.exists():
+              p, s = settings_kts, settings_kts.read_text()
+              if 'com.google.gms.google-services' not in s:
+                  marker = 'plugins {\n'
+                  if marker not in s:
+                      raise SystemExit('settings.gradle.kts plugins block not found')
+                  s = s.replace(marker, marker + '    id("com.google.gms.google-services") version "4.4.3" apply false\n', 1)
+              p.write_text(s)
+          else:
+              raise SystemExit('No Android settings Gradle file found')
+
+          groovy = Path('android/app/build.gradle')
+          kotlin = Path('android/app/build.gradle.kts')
+          if groovy.exists():
+              p, s = groovy, groovy.read_text()
+              if 'id "com.google.gms.google-services"' not in s:
+                  marker = 'plugins {\n'
+                  if marker not in s:
+                      raise SystemExit('app build.gradle plugins block not found')
+                  s = s.replace(marker, marker + '    id "com.google.gms.google-services"\n', 1)
+              p.write_text(s)
+          elif kotlin.exists():
+              p, s = kotlin, kotlin.read_text()
+              if 'id("com.google.gms.google-services")' not in s:
+                  marker = 'plugins {\n'
+                  if marker not in s:
+                      raise SystemExit('app build.gradle.kts plugins block not found')
+                  s = s.replace(marker, marker + '    id("com.google.gms.google-services")\n', 1)
+              p.write_text(s)
+          else:
+              raise SystemExit('No Android app Gradle file found')
+          PY
       - name: Configure Android permissions and use committed GG icon
         shell: bash
         run: |
@@ -55,6 +108,8 @@ jobs:
           cp assets/branding/gg_logo_icon.png android/app/src/main/res/drawable/gg_logo.png
       - name: Get dependencies
         run: flutter pub get
+      - name: Apply Firebase messaging runtime wiring
+        run: python3 tool/fix_firebase_messaging.py
       - name: Apply premium chat UI
         run: python3 tool/upgrade_chat_ui.py
       - name: Fix chat composer Dart syntax
@@ -69,6 +124,10 @@ jobs:
           test -s assets/branding/gg_logo_icon.png
           test -s android/app/src/main/res/drawable/gg_logo.png
           grep -q 'android:icon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml
+      - name: Verify Firebase configuration
+        run: |
+          test -s android/app/google-services.json
+          grep -q '"package_name": "com.example.gg_messenger"' android/app/google-services.json
       - name: Remove generated template test
         run: rm -f test/widget_test.dart
       - name: Analyze code (non-blocking)
