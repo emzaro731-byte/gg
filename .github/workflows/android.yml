@@ -62,6 +62,59 @@ jobs:
       - name: Analyze code (non-blocking)
         run: flutter analyze --no-fatal-infos || true
 
+      - name: Enable Android core library desugaring
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          groovy = Path("android/app/build.gradle")
+          kotlin = Path("android/app/build.gradle.kts")
+
+          if groovy.exists():
+              p = groovy
+              s = p.read_text()
+              if "coreLibraryDesugaringEnabled true" not in s:
+                  marker = "compileOptions {"
+                  if marker in s:
+                      s = s.replace(marker, marker + "\n        coreLibraryDesugaringEnabled true", 1)
+                  else:
+                      s = s.replace("android {", "android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }", 1)
+              dependency = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
+              if "desugar_jdk_libs" not in s:
+                  if "dependencies {" in s:
+                      s = s.replace("dependencies {", "dependencies {\n    " + dependency, 1)
+                  else:
+                      s += "\n\ndependencies {\n    " + dependency + "\n}\n"
+              p.write_text(s)
+              print("Patched android/app/build.gradle")
+          elif kotlin.exists():
+              p = kotlin
+              s = p.read_text()
+              if "isCoreLibraryDesugaringEnabled = true" not in s:
+                  marker = "compileOptions {"
+                  if marker in s:
+                      s = s.replace(marker, marker + "\n        isCoreLibraryDesugaringEnabled = true", 1)
+                  else:
+                      s = s.replace("android {", "android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }", 1)
+              dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+              if "desugar_jdk_libs" not in s:
+                  if "dependencies {" in s:
+                      s = s.replace("dependencies {", "dependencies {\n    " + dependency, 1)
+                  else:
+                      s += "\n\ndependencies {\n    " + dependency + "\n}\n"
+              p.write_text(s)
+              print("Patched android/app/build.gradle.kts")
+          else:
+              raise SystemExit("No Android app Gradle file found")
+          PY
+
+      - name: Clean Flutter build
+        run: flutter clean
+
+      - name: Get dependencies again
+        run: flutter pub get
+
       - name: Build release APK
         run: flutter build apk --release
 
