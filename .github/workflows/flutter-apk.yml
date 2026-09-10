@@ -55,7 +55,8 @@ jobs:
           test -s assets/branding/gg_logo.svg
           test -s assets/branding/gg_logo.png
           test -s android/app/src/main/AndroidManifest.xml
-          grep -q 'android:icon="@mipmap/launcher_icon"' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:icon="@mipmap/launcher_icon"' android/app/src/main/AndroidManifest.xml || \
+            grep -q 'android:icon="@mipmap/ic_launcher"' android/app/src/main/AndroidManifest.xml
 
       - name: Remove generated Flutter sample test
         run: rm -f test/widget_test.dart
@@ -82,20 +83,12 @@ jobs:
               if "coreLibraryDesugaringEnabled true" not in s:
                   marker = "compileOptions {"
                   if marker in s:
-                      s = s.replace(
-                          marker,
-                          marker + "\n        coreLibraryDesugaringEnabled true",
-                          1,
-                      )
+                      s = s.replace(marker, marker + "\n        coreLibraryDesugaringEnabled true", 1)
                   else:
                       android_marker = "android {"
                       if android_marker not in s:
                           raise SystemExit("Could not find android { block in build.gradle")
-                      s = s.replace(
-                          android_marker,
-                          android_marker + "\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }",
-                          1,
-                      )
+                      s = s.replace(android_marker, android_marker + "\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }", 1)
 
               dependency = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
               if "desugar_jdk_libs" not in s:
@@ -114,20 +107,12 @@ jobs:
               if "isCoreLibraryDesugaringEnabled = true" not in s:
                   marker = "compileOptions {"
                   if marker in s:
-                      s = s.replace(
-                          marker,
-                          marker + "\n        isCoreLibraryDesugaringEnabled = true",
-                          1,
-                      )
+                      s = s.replace(marker, marker + "\n        isCoreLibraryDesugaringEnabled = true", 1)
                   else:
                       android_marker = "android {"
                       if android_marker not in s:
                           raise SystemExit("Could not find android { block in build.gradle.kts")
-                      s = s.replace(
-                          android_marker,
-                          android_marker + "\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }",
-                          1,
-                      )
+                      s = s.replace(android_marker, android_marker + "\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }", 1)
 
               dependency = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
               if "desugar_jdk_libs" not in s:
