@@ -10,8 +10,10 @@ class NotificationService {
 
   Future<void> initialize() async {
     if (kIsWeb || _initialized) return;
+    // flutter_local_notifications expects the Android resource name here,
+    // without @drawable/ or @mipmap/. GG uses its committed drawable icon.
     const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      android: AndroidInitializationSettings('gg_logo'),
     );
     await _plugin.initialize(settings);
     _initialized = true;
