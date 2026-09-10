@@ -35,11 +35,27 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Install SVG converter
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Convert GG logo to PNG
+        run: |
+          test -s assets/branding/gg_logo.svg
+          rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o assets/branding/gg_logo.png
+          test -s assets/branding/gg_logo.png
+
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Verify GG logo asset
-        run: test -s assets/branding/gg_logo.svg
+      - name: Generate Android launcher icon
+        run: dart run flutter_launcher_icons
+
+      - name: Verify GG logo assets
+        run: |
+          test -s assets/branding/gg_logo.svg
+          test -s assets/branding/gg_logo.png
+          test -s android/app/src/main/AndroidManifest.xml
+          grep -q 'android:icon="@mipmap/launcher_icon"' android/app/src/main/AndroidManifest.xml
 
       - name: Remove generated Flutter sample test
         run: rm -f test/widget_test.dart
