@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -122,13 +124,27 @@ class _LoginPageState extends State<LoginPage> {
           password: password,
         );
       }
+    } on SocketException {
+      if (mounted) {
+        setState(() {
+          error =
+              'No internet connection. Check your connection and try again. Your saved data remains available offline.';
+        });
+      }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
     } on PostgrestException catch (e) {
       if (mounted) setState(() => error = e.message);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        setState(() => error = 'Authentication failed. Please try again.');
+        final message = e.toString().toLowerCase();
+        setState(() {
+          error = message.contains('failed host lookup') ||
+                  message.contains('socketexception') ||
+                  message.contains('connection')
+              ? 'Unable to connect to GG Messenger. Check your internet connection and try again.'
+              : 'Authentication failed. Please try again.';
+        });
       }
     } finally {
       if (mounted) setState(() => loading = false);
@@ -154,6 +170,11 @@ class _LoginPageState extends State<LoginPage> {
       );
       if (mounted) {
         setState(() => notice = 'Password reset link sent to $email.');
+      }
+    } on SocketException {
+      if (mounted) {
+        setState(() => error =
+            'No internet connection. Connect to the internet and try again.');
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
@@ -413,6 +434,11 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
       );
       if (mounted) {
         setState(() => notice = 'Password changed successfully.');
+      }
+    } on SocketException {
+      if (mounted) {
+        setState(() => error =
+            'No internet connection. Connect to the internet and try again.');
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => error = e.message);
