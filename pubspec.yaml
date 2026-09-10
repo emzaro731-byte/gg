@@ -31,6 +31,7 @@ dependencies:
   flutter_tts: ^4.2.5
   share_plus: ^10.1.4
   flutter_svg: ^2.2.1
+  file_saver: ^0.4.0
 
 dev_dependencies:
   flutter_test:
