@@ -108,6 +108,8 @@ jobs:
           cp assets/branding/gg_logo_icon.png android/app/src/main/res/drawable/gg_logo.png
       - name: Get dependencies
         run: flutter pub get
+      - name: Apply native Flutter home interface
+        run: python3 tool/apply_native_home_ui.py
       - name: Apply Firebase messaging runtime wiring
         run: python3 tool/fix_firebase_messaging.py
       - name: Apply premium chat UI
