@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "914917353860",
+    "project_id": "gg-messenger-a5a30",
+    "storage_bucket": "gg-messenger-a5a30.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:914917353860:android:cbf1e178e56789342715d1",
+        "android_client_info": {
+          "package_name": "com.example.gg_messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOdU5OWhef7od_J5iqAUzFV1qiXEmyg34"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
