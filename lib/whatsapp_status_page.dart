@@ -95,17 +95,33 @@ class _WhatsAppStatusPageState extends State<WhatsAppStatusPage> {
     }
   }
 
-  Future<void> _pickMedia({required bool video}) async {
+  Future<void> _pickMedia({required bool video, required ImageSource source}) async {
     if (userId == null) return;
     try {
-      final XFile? file = video ? await picker.pickVideo(source: ImageSource.gallery) : await picker.pickImage(source: ImageSource.gallery, imageQuality: 85, maxWidth: 1600);
+      final XFile? file = video
+          ? await picker.pickVideo(source: source, maxDuration: const Duration(minutes: 2))
+          : await picker.pickImage(source: source, imageQuality: 85, maxWidth: 1600);
       if (file == null) return;
+
       final bytes = await file.readAsBytes();
       final extension = video ? 'mp4' : 'jpg';
       final path = '$userId/${DateTime.now().millisecondsSinceEpoch}.$extension';
-      await supabase.storage.from('status-media').uploadBinary(path, bytes, fileOptions: FileOptions(upsert: false, contentType: video ? 'video/mp4' : 'image/jpeg'));
+      await supabase.storage.from('status-media').uploadBinary(
+        path,
+        bytes,
+        fileOptions: FileOptions(
+          upsert: false,
+          contentType: video ? 'video/mp4' : 'image/jpeg',
+        ),
+      );
+
       final caption = await _captionDialog();
-      await supabase.from('statuses').insert({'user_id': userId, 'media_path': path, 'media_type': video ? 'video' : 'image', 'caption': caption});
+      await supabase.from('statuses').insert({
+        'user_id': userId,
+        'media_path': path,
+        'media_type': video ? 'video' : 'image',
+        'caption': caption,
+      });
       await _loadStatuses();
     } catch (e) {
       _showError('Could not create status: $e');
@@ -139,11 +155,55 @@ class _WhatsAppStatusPageState extends State<WhatsAppStatusPage> {
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: Wrap(children: [
-          ListTile(leading: const Icon(Icons.text_fields_rounded), title: const Text('Text status'), onTap: () { Navigator.pop(context); _createTextStatus(); }),
-          ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Photo status'), onTap: () { Navigator.pop(context); _pickMedia(video: false); }),
-          ListTile(leading: const Icon(Icons.videocam_outlined), title: const Text('Video status'), onTap: () { Navigator.pop(context); _pickMedia(video: true); }),
-        ]),
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.camera_alt_rounded)),
+              title: const Text('Camera photo'),
+              subtitle: const Text('Take a photo now'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(video: false, source: ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.photo_library_outlined)),
+              title: const Text('Gallery photo'),
+              subtitle: const Text('Choose a photo from your phone'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(video: false, source: ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.videocam_rounded)),
+              title: const Text('Camera video'),
+              subtitle: const Text('Record a video now'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(video: true, source: ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.video_library_outlined)),
+              title: const Text('Gallery video'),
+              subtitle: const Text('Choose a video from your phone'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(video: true, source: ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.text_fields_rounded)),
+              title: const Text('Text status'),
+              subtitle: const Text('Share a text update'),
+              onTap: () {
+                Navigator.pop(context);
+                _createTextStatus();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -175,7 +235,11 @@ class _WhatsAppStatusPageState extends State<WhatsAppStatusPage> {
                 ],
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(onPressed: _showCreateMenu, icon: const Icon(Icons.add_rounded), label: const Text('New status', style: TextStyle(fontWeight: FontWeight.w800))),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showCreateMenu,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New status', style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
     );
   }
 
@@ -185,7 +249,21 @@ class _WhatsAppStatusPageState extends State<WhatsAppStatusPage> {
     final avatar = (profile?['avatar_url'] ?? '').toString();
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      leading: Stack(clipBehavior: Clip.none, children: [_avatar(name, avatar, radius: 30, border: mine.isNotEmpty), Positioned(right: -2, bottom: -1, child: CircleAvatar(radius: 10, backgroundColor: Theme.of(context).colorScheme.primary, child: const Icon(Icons.add, size: 14)))]),
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _avatar(name, avatar, radius: 30, border: mine.isNotEmpty),
+          Positioned(
+            right: -2,
+            bottom: -1,
+            child: CircleAvatar(
+              radius: 10,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              child: const Icon(Icons.add, size: 14),
+            ),
+          ),
+        ],
+      ),
       title: const Text('My status', style: TextStyle(fontWeight: FontWeight.w900)),
       subtitle: Text(mine.isEmpty ? 'Tap to add a status update' : '${mine.length} update${mine.length == 1 ? '' : 's'} • visible for 24 hours'),
       onTap: _showCreateMenu,
@@ -212,8 +290,19 @@ class _WhatsAppStatusPageState extends State<WhatsAppStatusPage> {
   }
 
   Widget _avatar(String name, String url, {double radius = 28, bool border = false}) {
-    final child = url.isNotEmpty ? CircleAvatar(radius: radius, backgroundImage: NetworkImage(url)) : CircleAvatar(radius: radius, child: Text(name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)));
-    return border ? Container(padding: const EdgeInsets.all(2.5), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2.5)), child: child) : child;
+    final child = url.isNotEmpty
+        ? CircleAvatar(radius: radius, backgroundImage: NetworkImage(url))
+        : CircleAvatar(
+            radius: radius,
+            child: Text(name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          );
+    return border
+        ? Container(
+            padding: const EdgeInsets.all(2.5),
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2.5)),
+            child: child,
+          )
+        : child;
   }
 
   String _statusSummary(Map<String, dynamic> status, DateTime? created) {
@@ -236,9 +325,24 @@ class _WhatsAppStatusPageState extends State<WhatsAppStatusPage> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => StatusViewerPage(status: status, name: name, mediaUrl: signedUrl)));
   }
 
-  Widget _sectionTitle(String title) => Padding(padding: const EdgeInsets.fromLTRB(8, 4, 8, 6), child: Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary)));
+  Widget _sectionTitle(String title) => Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+        child: Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary)),
+      );
 
-  Widget _emptyUpdates() => Padding(padding: const EdgeInsets.fromLTRB(28, 60, 28, 30), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.update_rounded, size: 58, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 14), const Text('No recent updates', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)), const SizedBox(height: 7), const Text('When your friends post photos, videos, or text, they’ll appear here.', textAlign: TextAlign.center)]));
+  Widget _emptyUpdates() => Padding(
+        padding: const EdgeInsets.fromLTRB(28, 60, 28, 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.update_rounded, size: 58, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 14),
+            const Text('No recent updates', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 7),
+            const Text('When your friends post photos, videos, or text, they’ll appear here.', textAlign: TextAlign.center),
+          ],
+        ),
+      );
 }
 
 class StatusViewerPage extends StatelessWidget {
@@ -258,16 +362,33 @@ class StatusViewerPage extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: type == 'image' && mediaUrl != null
-              ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [Expanded(child: InteractiveViewer(child: Image.network(mediaUrl!, fit: BoxFit.contain))), if (caption.isNotEmpty) _caption(caption)])
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(child: InteractiveViewer(child: Image.network(mediaUrl!, fit: BoxFit.contain))),
+                    if (caption.isNotEmpty) _caption(caption),
+                  ],
+                )
               : type == 'video'
-                  ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 80), const SizedBox(height: 12), const Text('Video status', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)), if (caption.isNotEmpty) _caption(caption)])
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 80),
+                        const SizedBox(height: 12),
+                        const Text('Video status', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                        if (caption.isNotEmpty) _caption(caption),
+                      ],
+                    )
                   : Text(caption, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800)),
         ),
       ),
     );
   }
 
-  Widget _caption(String text) => Padding(padding: const EdgeInsets.only(top: 12), child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 17)));
+  Widget _caption(String text) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 17)),
+      );
 }
 
 class EditedStatus {
@@ -284,10 +405,12 @@ class StatusMediaEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Edit status')),
-      body: Column(children: [
-        Expanded(child: Image.memory(Uint8List.fromList(bytes), fit: BoxFit.contain)),
-        const Padding(padding: EdgeInsets.all(16), child: Text('Add a caption from the New status menu to publish this media.')),
-      ]),
+      body: Column(
+        children: [
+          Expanded(child: Image.memory(Uint8List.fromList(bytes), fit: BoxFit.contain)),
+          const Padding(padding: EdgeInsets.all(16), child: Text('Add a caption from the New status menu to publish this media.')),
+        ],
+      ),
     );
   }
 }
