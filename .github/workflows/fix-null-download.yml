@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/fix-null-download.yml'
       - 'lib/gg_image_page.dart'
 
 permissions:
