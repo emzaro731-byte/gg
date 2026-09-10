@@ -31,6 +31,27 @@ replacement = """      unawaited(NotificationService.instance.showIncomingCall(
       _showIncoming(context, callId, callerId, data['video'] == true);"""
 if needle in s and "showIncomingCall" not in s:
     s = s.replace(needle, replacement, 1)
+
+# Send a server-side FCM push after the call session is created. Realtime
+# remains the fast foreground path; FCM covers background/terminated devices.
+call_push_marker = "    final callId = row['id'].toString();\n"
+call_push = """    final callId = row['id'].toString();
+    unawaited(() async {
+      try {
+        await supabase.functions.invoke('send-call-push', body: {
+          'call_id': callId,
+          'callee_user_id': calleeId,
+          'caller_id': user.id,
+          'caller_name': title,
+          'call_type': video ? 'video' : 'voice',
+        });
+      } catch (_) {
+        // Push is best-effort; the existing realtime invite remains active.
+      }
+    }());
+"""
+if call_push_marker in s and "functions.invoke('send-call-push'" not in s:
+    s = s.replace(call_push_marker, call_push, 1)
 call.write_text(s)
 
 # High-priority incoming-call notification with sound and vibration.
@@ -70,4 +91,4 @@ if "Future<void> showIncomingCall" not in s:
         raise SystemExit('NotificationService closing brace not found')
     s = s[:pos] + method + s[pos:]
 notif.write_text(s)
-print('Applied GG chat send and incoming call notification fixes.')
+print('Applied GG chat send, incoming call notification, and FCM call push fixes.')
