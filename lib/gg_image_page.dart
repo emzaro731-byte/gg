@@ -25,6 +25,7 @@ class _GgImagePageState extends State<GgImagePage> {
   String type = 'image';
   String provider = 'auto';
   String aspectRatio = '1:1';
+  int videoDuration = 5;
   bool instrumental = false;
   bool generating = false;
   bool downloading = false;
@@ -96,7 +97,10 @@ class _GgImagePageState extends State<GgImagePage> {
       taskId = null;
       error = null;
       if (value == 'image') aspectRatio = '1:1';
-      if (value == 'video') aspectRatio = '16:9';
+      if (value == 'video') {
+        aspectRatio = '16:9';
+        videoDuration = 5;
+      }
     });
   }
 
@@ -112,6 +116,7 @@ class _GgImagePageState extends State<GgImagePage> {
     }
     if (type == 'video') {
       input['aspectRatio'] = aspectRatio;
+      input['duration'] = videoDuration;
       if (imageUrlController.text.trim().isNotEmpty) input['imageUrl'] = imageUrlController.text.trim();
     }
     if (type == 'image') input['aspect_ratio'] = aspectRatio;
@@ -156,10 +161,10 @@ class _GgImagePageState extends State<GgImagePage> {
       final returnedTask = data['task_id']?.toString();
       if (url == null || url.isEmpty) {
         if (returnedTask == null || returnedTask.isEmpty) throw Exception(returnedError ?? 'The provider returned no output.');
-        if (mounted) setState(() => taskId = returnedTask);
+        taskId = returnedTask;
         await _pollTask(returnedTask);
       } else {
-        if (mounted) setState(() => outputUrl = url);
+        outputUrl = url;
         await _prepareVideo(url);
       }
     } on FunctionException catch (e) {
@@ -202,9 +207,7 @@ class _GgImagePageState extends State<GgImagePage> {
       }
       if (successFlag == 1) {
         final nested = responseData is Map ? responseData['response'] : null;
-        final nestedUrl = nested is Map
-            ? (nested['resultUrls'] is List && nested['resultUrls'].isNotEmpty ? nested['resultUrls'].first.toString() : null)
-            : null;
+        final nestedUrl = nested is Map ? (nested['resultUrls'] is List && nested['resultUrls'].isNotEmpty ? nested['resultUrls'].first.toString() : null) : null;
         if (nestedUrl != null && nestedUrl.isNotEmpty) {
           setState(() => outputUrl = nestedUrl);
           await _prepareVideo(nestedUrl);
@@ -230,11 +233,11 @@ class _GgImagePageState extends State<GgImagePage> {
     if (url == null) return;
     if (audioPlaying) {
       await audioPlayer.pause();
-      if (mounted) setState(() => audioPlaying = false);
+      setState(() => audioPlaying = false);
       return;
     }
     await audioPlayer.play(UrlSource(url));
-    if (mounted) setState(() => audioPlaying = true);
+    setState(() => audioPlaying = true);
     audioPlayer.onPlayerComplete.listen((_) {
       if (mounted) setState(() => audioPlaying = false);
     });
@@ -260,9 +263,7 @@ class _GgImagePageState extends State<GgImagePage> {
       if (data is! Map) throw Exception('Invalid download response.');
       final downloadUrl = data['download_url']?.toString();
       if (downloadUrl == null || downloadUrl.isEmpty) throw Exception(data['error']?.toString() ?? 'No download URL was returned.');
-      final safeTitle = titleController.text.trim().isEmpty
-          ? 'gg-$type'
-          : titleController.text.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_');
+      final safeTitle = titleController.text.trim().isEmpty ? 'gg-${type}' : titleController.text.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_');
       final fileName = '$safeTitle-${DateTime.now().millisecondsSinceEpoch}.${_extension()}';
       final saved = await FileSaver.instance.downloadLink(
         link: LinkDetails(link: downloadUrl),
@@ -270,13 +271,11 @@ class _GgImagePageState extends State<GgImagePage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved to your phone: $fileName')));
-        if (saved.isEmpty) setState(() => error = 'Check your Downloads folder for the generated file.');
+        if (saved.isEmpty) setState(() => error = 'The download was handed to Android, but the saved path was not returned. Check Downloads.');
       }
     } on FunctionException catch (e) {
       final details = e.details;
-      final message = details is Map && details['error'] != null
-          ? details['error'].toString()
-          : details?.toString() ?? e.reasonPhrase ?? 'Download failed.';
+      final message = details is Map && details['error'] != null ? details['error'].toString() : details?.toString() ?? e.reasonPhrase ?? 'Download failed.';
       if (mounted) setState(() => error = message);
     } catch (e) {
       if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
@@ -285,258 +284,113 @@ class _GgImagePageState extends State<GgImagePage> {
     }
   }
 
-  String get _typeLabel => type == 'image' ? 'Image' : type == 'video' ? 'Video' : 'Music';
-  IconData get _typeIcon => type == 'image' ? Icons.auto_awesome_rounded : type == 'video' ? Icons.movie_creation_rounded : Icons.music_note_rounded;
-  String get _typeDescription => type == 'image'
-      ? 'Create polished artwork, portraits and visuals.'
-      : type == 'video'
-          ? 'Turn ideas and images into cinematic video.'
-          : 'Generate songs, instrumentals and sound ideas.';
-
-  Widget _sectionCard({required Widget child, EdgeInsetsGeometry? padding}) {
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(padding: padding ?? const EdgeInsets.all(16), child: child),
-    );
-  }
-
-  Widget _modeButton(String value, String label, IconData icon) {
-    final selected = type == value;
-    return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: generating ? null : () => _setType(value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(children: [
-            Icon(icon, color: selected ? Theme.of(context).colorScheme.onPrimary : null),
-            const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: selected ? Theme.of(context).colorScheme.onPrimary : null)),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOutput(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (outputUrl == null) return const SizedBox.shrink();
-    return _sectionCard(
-      padding: const EdgeInsets.all(10),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
-          child: Row(children: [
-            Container(width: 38, height: 38, decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(12)), child: Icon(_typeIcon)),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Your $_typeLabel is ready', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              Text('Preview and save it to your phone.', style: Theme.of(context).textTheme.bodySmall),
-            ])),
-          ]),
-        ),
-        if (type == 'image')
-          ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.network(outputUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 220, child: Center(child: Text('Preview unavailable'))))),
-        if (type == 'video' && videoController?.value.isInitialized == true)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: AspectRatio(
-              aspectRatio: videoController!.value.aspectRatio,
-              child: Stack(alignment: Alignment.center, children: [
-                VideoPlayer(videoController!),
-                DecoratedBox(
-                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(50)),
-                  child: IconButton(
-                    onPressed: () => setState(() => videoController!.value.isPlaying ? videoController!.pause() : videoController!.play()),
-                    iconSize: 34,
-                    color: Colors.white,
-                    icon: Icon(videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow),
-                  ),
-                ),
-              ]),
-            ),
-          ),
-        if (type == 'music')
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(18)),
-            child: Row(children: [
-              CircleAvatar(radius: 28, child: Icon(audioPlaying ? Icons.graphic_eq_rounded : Icons.music_note_rounded)),
-              const SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(titleController.text.trim().isEmpty ? 'GG AI Music' : titleController.text.trim(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
-                Text(audioPlaying ? 'Playing now' : 'Ready to preview', style: Theme.of(context).textTheme.bodySmall),
-              ])),
-              IconButton.filled(onPressed: _playAudio, icon: Icon(audioPlaying ? Icons.pause : Icons.play_arrow)),
-            ]),
-          ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 52,
-          child: FilledButton.icon(
-            onPressed: downloading ? null : _downloadOutput,
-            icon: downloading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded),
-            label: Text(downloading ? 'Saving…' : 'Save $_typeLabel to phone'),
-          ),
-        ),
-      ]),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final presets = _presets[_typeLabel]!;
+    final presets = _presets[type == 'image' ? 'Image' : type == 'video' ? 'Video' : 'Music']!;
     return Scaffold(
       appBar: AppBar(
         title: const Text('GG Create', style: TextStyle(fontWeight: FontWeight.w900)),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            tooltip: 'Clear',
-            onPressed: generating ? null : () => setState(() { promptController.clear(); outputUrl = null; taskId = null; error = null; }),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
+        actions: [IconButton(onPressed: generating ? null : () => setState(() { promptController.clear(); outputUrl = null; error = null; }), icon: const Icon(Icons.refresh_rounded))],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 36),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primaryContainer, scheme.secondaryContainer]),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Row(children: [
-              Container(width: 58, height: 58, decoration: BoxDecoration(color: scheme.surface.withValues(alpha: .65), borderRadius: BorderRadius.circular(18)), child: Icon(_typeIcon, size: 30)),
-              const SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('AI $_typeLabel Studio', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Text(_typeDescription),
-              ])),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(gradient: LinearGradient(colors: [scheme.primaryContainer, scheme.secondaryContainer]), borderRadius: BorderRadius.circular(28)),
+            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.auto_awesome_rounded, size: 36),
+              SizedBox(height: 8),
+              Text('Create anything', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+              SizedBox(height: 4),
+              Text('Images, videos and music through your Supabase AI APIs.'),
             ]),
-          ),
-          const SizedBox(height: 14),
-          _sectionCard(
-            padding: const EdgeInsets.all(6),
-            child: Row(children: [
-              _modeButton('image', 'Image', Icons.image_rounded),
-              _modeButton('video', 'Video', Icons.movie_creation_rounded),
-              _modeButton('music', 'Music', Icons.music_note_rounded),
-            ]),
-          ),
-          const SizedBox(height: 14),
-          _sectionCard(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Generation setup', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Text('Choose the engine and model for this creation.', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue: provider,
-                decoration: const InputDecoration(labelText: 'AI engine', prefixIcon: Icon(Icons.hub_rounded)),
-                items: const [
-                  DropdownMenuItem(value: 'auto', child: Text('Auto — use Supabase AI configuration')),
-                  DropdownMenuItem(value: 'kie', child: Text('KIE AI')),
-                  DropdownMenuItem(value: 'existing-api', child: Text('Existing GG AI API')),
-                ],
-                onChanged: generating ? null : (v) => setState(() => provider = v ?? 'auto'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: presets.any((p) => p['id'] == modelController.text) ? modelController.text : null,
-                decoration: InputDecoration(labelText: 'Model', prefixIcon: Icon(_typeIcon)),
-                hint: const Text('Select a model'),
-                items: presets.map((p) => DropdownMenuItem(value: p['id'], child: Text(p['name']!))).toList(),
-                onChanged: generating ? null : (v) { if (v != null) _selectPreset(v); },
-              ),
-              const SizedBox(height: 10),
-              TextField(controller: modelController, decoration: const InputDecoration(labelText: 'Model ID', prefixIcon: Icon(Icons.code_rounded), hintText: 'Enter any current KIE model ID')),
-              const SizedBox(height: 8),
-              Text('API credentials stay inside Supabase and are never shipped in the APK.', style: Theme.of(context).textTheme.bodySmall),
-            ]),
-          ),
-          const SizedBox(height: 14),
-          _sectionCard(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(type == 'music' ? 'Describe your song' : 'Describe your creation', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Text(type == 'music' ? 'Give GG the lyrics, mood or musical direction.' : 'Be specific about subject, style, lighting and motion.', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 12),
-              TextField(
-                controller: promptController,
-                minLines: 5,
-                maxLines: 9,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: type == 'video' ? 'A cinematic futuristic Lagos night drive, neon reflections, smooth camera movement…' : type == 'music' ? 'High-energy Nigerian Afrobeats with infectious drums, rich vocals and a confident hook…' : 'A futuristic Nigerian city at night, cinematic lighting, premium realistic photography…',
-                  alignLabelWithHint: true,
-                  filled: true,
-                  fillColor: scheme.surfaceContainerHighest.withValues(alpha: .45),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
-                ),
-              ),
-              if (type == 'music') ...[
-                const SizedBox(height: 12),
-                TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Song title', prefixIcon: Icon(Icons.title_rounded))),
-                const SizedBox(height: 12),
-                TextField(controller: styleController, maxLines: 3, decoration: const InputDecoration(labelText: 'Style / genre', hintText: 'Afrobeats, Afro-fusion, R&B, cinematic…', prefixIcon: Icon(Icons.tune_rounded))),
-                SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Instrumental only', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: const Text('Generate without vocals'), value: instrumental, onChanged: generating ? null : (v) => setState(() => instrumental = v)),
-              ],
-              if (type == 'video') ...[
-                const SizedBox(height: 12),
-                TextField(controller: imageUrlController, decoration: const InputDecoration(labelText: 'Reference image URL', hintText: 'Optional image-to-video source', prefixIcon: Icon(Icons.link_rounded))),
-              ],
-            ]),
-          ),
-          if (type != 'music') ...[
-            const SizedBox(height: 14),
-            _sectionCard(child: Row(children: [
-              const Icon(Icons.crop_rounded),
-              const SizedBox(width: 12),
-              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Aspect ratio', style: TextStyle(fontWeight: FontWeight.w800)), Text('Choose the output frame.', style: TextStyle(fontSize: 12))])),
-              DropdownButton<String>(value: aspectRatio, underline: const SizedBox.shrink(), items: const [DropdownMenuItem(value: '1:1', child: Text('1:1')), DropdownMenuItem(value: '16:9', child: Text('16:9')), DropdownMenuItem(value: '9:16', child: Text('9:16'))], onChanged: generating ? null : (v) => setState(() => aspectRatio = v ?? aspectRatio)),
-            ])),
-          ],
-          const SizedBox(height: 14),
-          _sectionCard(
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              leading: const Icon(Icons.tune_rounded),
-              title: const Text('Advanced controls', style: TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: const Text('Optional model-specific JSON parameters'),
-              children: [Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: TextField(controller: advancedController, minLines: 4, maxLines: 10, decoration: const InputDecoration(hintText: '{"duration": 5, "quality": "1080p"}', alignLabelWithHint: true)))],
-            ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 58,
-            child: FilledButton.icon(
-              onPressed: generating ? null : _generate,
-              icon: generating ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(_typeIcon),
-              label: Text(generating ? 'Creating $_typeLabel…' : 'Create $_typeLabel', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-            ),
+          SegmentedButton<String>(segments: const [
+            ButtonSegment(value: 'image', label: Text('Image'), icon: Icon(Icons.image_rounded)),
+            ButtonSegment(value: 'video', label: Text('Video'), icon: Icon(Icons.movie_creation_rounded)),
+            ButtonSegment(value: 'music', label: Text('Music'), icon: Icon(Icons.music_note_rounded)),
+          ], selected: {type}, onSelectionChanged: generating ? null : (s) => _setType(s.first)),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            initialValue: provider,
+            decoration: const InputDecoration(labelText: 'AI provider'),
+            items: const [
+              DropdownMenuItem(value: 'auto', child: Text('Auto — use APIs configured in Supabase')),
+              DropdownMenuItem(value: 'kie', child: Text('KIE — all supported KIE models')),
+              DropdownMenuItem(value: 'existing-api', child: Text('Existing GG AI API')),
+            ],
+            onChanged: generating ? null : (v) => setState(() => provider = v ?? 'auto'),
           ),
-          if (generating) ...[
+          const SizedBox(height: 8),
+          const Text('GG checks the secure Supabase Edge Function configuration. API keys never go into the APK.', style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: presets.any((p) => p['id'] == modelController.text) ? modelController.text : null,
+            decoration: const InputDecoration(labelText: 'AI model preset'),
+            hint: const Text('Choose a model or enter any current KIE model ID below'),
+            items: presets.map((p) => DropdownMenuItem(value: p['id'], child: Text(p['name']!))).toList(),
+            onChanged: generating ? null : (v) { if (v != null) _selectPreset(v); },
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: modelController, decoration: const InputDecoration(labelText: 'Model ID', hintText: 'Any current KIE model ID')),
+          const SizedBox(height: 12),
+          TextField(
+            controller: promptController,
+            minLines: 4,
+            maxLines: 8,
+            decoration: InputDecoration(labelText: type == 'music' ? 'Song prompt / lyrics' : 'Prompt', hintText: type == 'video' ? 'A cinematic futuristic Lagos night drive…' : type == 'music' ? 'High-energy Nigerian Afrobeats, infectious drums, rich vocals…' : 'A futuristic Nigerian city at night…', alignLabelWithHint: true),
+          ),
+          if (type == 'music') ...[
             const SizedBox(height: 12),
-            _sectionCard(child: Row(children: [const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('GG is creating your $_typeLabel', style: const TextStyle(fontWeight: FontWeight.w800)), const Text('Keep the app open while the provider finishes.', style: TextStyle(fontSize: 12))]))])),
+            TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Song title')),
+            const SizedBox(height: 12),
+            TextField(controller: styleController, maxLines: 3, decoration: const InputDecoration(labelText: 'Style / genre', hintText: 'Afrobeats, Afro-fusion, cinematic…')),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Instrumental'), value: instrumental, onChanged: generating ? null : (v) => setState(() => instrumental = v)),
           ],
-          if (taskId != null) Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText('Task ID: $taskId', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall)),
-          if (error != null) ...[
-            const SizedBox(height: 14),
-            Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(18)), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.error_outline_rounded, color: scheme.onErrorContainer), const SizedBox(width: 10), Expanded(child: Text(error!, style: TextStyle(color: scheme.onErrorContainer)))])),
+          if (type == 'video') ...[
+            const SizedBox(height: 12),
+            TextField(controller: imageUrlController, decoration: const InputDecoration(labelText: 'Reference image URL (optional)')),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: videoDuration,
+              decoration: const InputDecoration(labelText: 'Video duration', prefixIcon: Icon(Icons.timer_rounded)),
+              items: const [
+                DropdownMenuItem(value: 5, child: Text('5 seconds')),
+                DropdownMenuItem(value: 6, child: Text('6 seconds')),
+                DropdownMenuItem(value: 7, child: Text('7 seconds')),
+                DropdownMenuItem(value: 8, child: Text('8 seconds')),
+                DropdownMenuItem(value: 9, child: Text('9 seconds')),
+                DropdownMenuItem(value: 10, child: Text('10 seconds')),
+              ],
+              onChanged: generating ? null : (v) => setState(() => videoDuration = v ?? 5),
+            ),
+            const SizedBox(height: 6),
+            Text('Choose a clip length from 5–10 seconds. GG sends the selected duration to the video model.', style: Theme.of(context).textTheme.bodySmall),
           ],
-          if (outputUrl != null) ...[const SizedBox(height: 16), _buildOutput(context)],
+          if (type != 'music') ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(initialValue: aspectRatio, decoration: const InputDecoration(labelText: 'Aspect ratio'), items: const [DropdownMenuItem(value: '1:1', child: Text('1:1')), DropdownMenuItem(value: '16:9', child: Text('16:9')), DropdownMenuItem(value: '9:16', child: Text('9:16'))], onChanged: generating ? null : (v) => setState(() => aspectRatio = v ?? aspectRatio)),
+          ],
+          const SizedBox(height: 12),
+          ExpansionTile(title: const Text('Advanced model input'), subtitle: const Text('Optional JSON for model-specific parameters'), children: [Padding(padding: const EdgeInsets.fromLTRB(0, 0, 0, 12), child: TextField(controller: advancedController, minLines: 3, maxLines: 10, decoration: const InputDecoration(hintText: '{"quality":"1080p"}')))]),
+          const SizedBox(height: 12),
+          SizedBox(height: 54, child: FilledButton.icon(onPressed: generating ? null : _generate, icon: generating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(type == 'image' ? Icons.image_rounded : type == 'video' ? Icons.movie_rounded : Icons.music_note_rounded), label: Text(generating ? 'Generating…' : 'Generate ${type[0].toUpperCase()}${type.substring(1)}'))),
+          if (generating) ...[const SizedBox(height: 12), Center(child: Text(type == 'video' ? 'Creating your ${videoDuration}-second video…' : 'AI is processing your creation. Please keep GG open.'))],
+          if (taskId != null) Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText('Task: $taskId', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall)),
+          if (error != null) ...[const SizedBox(height: 14), Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(18)), child: Text(error!, style: TextStyle(color: scheme.onErrorContainer)))],
+          if (outputUrl != null) ...[
+            const SizedBox(height: 18),
+            if (type == 'image') ClipRRect(borderRadius: BorderRadius.circular(24), child: Image.network(outputUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Padding(padding: EdgeInsets.all(20), child: Text('Generated image URL could not be displayed.')))),
+            if (type == 'video' && videoController?.value.isInitialized == true) ClipRRect(borderRadius: BorderRadius.circular(24), child: AspectRatio(aspectRatio: videoController!.value.aspectRatio, child: Stack(alignment: Alignment.center, children: [VideoPlayer(videoController!), IconButton.filled(onPressed: () => setState(() { videoController!.value.isPlaying ? videoController!.pause() : videoController!.play(); }), icon: Icon(videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow, size: 34))]))),
+            if (type == 'music') SizedBox(height: 70, child: FilledButton.icon(onPressed: _playAudio, icon: Icon(audioPlaying ? Icons.pause : Icons.play_arrow), label: Text(audioPlaying ? 'Pause music' : 'Play music'))),
+            const SizedBox(height: 12),
+            SizedBox(height: 52, child: OutlinedButton.icon(onPressed: downloading ? null : _downloadOutput, icon: downloading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded), label: Text(downloading ? 'Downloading…' : 'Download to phone'))),
+            const SizedBox(height: 10),
+            SelectableText(outputUrl!, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+          ],
         ],
       ),
     );
