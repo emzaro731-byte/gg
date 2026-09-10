@@ -47,14 +47,12 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: Install SVG converter
-        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
-      - name: Install the user's GG logo everywhere branding is required
+      - name: Install committed GG branding
         run: |
-          test -s assets/branding/gg_logo.svg
+          test -s assets/branding/gg_logo.png
+          test -s assets/branding/gg_logo_icon.png
           mkdir -p android/app/src/main/res/drawable
-          rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o assets/branding/gg_logo.png
-          rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o android/app/src/main/res/drawable/gg_logo.png
+          cp assets/branding/gg_logo_icon.png android/app/src/main/res/drawable/gg_logo.png
       - name: Get dependencies
         run: flutter pub get
       - name: Apply premium chat UI
@@ -63,10 +61,10 @@ jobs:
         run: python3 tool/fix_chat_syntax.py
       - name: Preserve chat during realtime reconnects
         run: python3 tool/fix_chat_stream.py
-      - name: Verify GG branding is used
+      - name: Verify committed GG branding is used
         run: |
-          test -s assets/branding/gg_logo.svg
           test -s assets/branding/gg_logo.png
+          test -s assets/branding/gg_logo_icon.png
           test -s android/app/src/main/res/drawable/gg_logo.png
           grep -q 'android:icon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml
       - name: Remove generated template test
