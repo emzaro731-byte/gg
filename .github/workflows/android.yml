@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-android:
-    name: Build GG Messenger APK
+    name: Build GG Messenger Android
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -139,7 +139,8 @@ jobs:
                   if marker in s: s = s.replace(marker, marker + '\n        coreLibraryDesugaringEnabled true', 1)
                   else: s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }', 1)
               dep = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
-              if 'desugar_jdk_libs' not in s: s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
+              if 'desugar_jdk_libs' not in s:
+                  s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
               p.write_text(s)
           elif kotlin.exists():
               p, s = kotlin, kotlin.read_text()
@@ -148,7 +149,8 @@ jobs:
                   if marker in s: s = s.replace(marker, marker + '\n        isCoreLibraryDesugaringEnabled = true', 1)
                   else: s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }', 1)
               dep = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
-              if 'desugar_jdk_libs' not in s: s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
+              if 'desugar_jdk_libs' not in s:
+                  s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1) if 'dependencies {' in s else s + '\n\ndependencies {\n    ' + dep + '\n}\n'
               p.write_text(s)
           else: raise SystemExit('No Android app Gradle file found')
           PY
@@ -160,10 +162,16 @@ jobs:
         run: flutter build apk --release --dart-define=dart.library.io.force_staggered_ipv6_lookup=true
       - name: Verify APK
         run: test -s build/app/outputs/flutter-apk/app-release.apk
-      - name: Publish APK
+      - name: Build release AAB
+        run: flutter build appbundle --release --dart-define=dart.library.io.force_staggered_ipv6_lookup=true
+      - name: Verify AAB
+        run: test -s build/app/outputs/bundle/release/app-release.aab
+      - name: Publish Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: GG-Messenger-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: GG-Messenger-Android
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
