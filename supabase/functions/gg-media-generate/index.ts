@@ -53,9 +53,13 @@ serve(async (req) => {
       const type = clean(body?.type, 30);
       if (!taskId) return jsonResponse({ error: "task_id is required." }, 400);
       if (provider !== "kie" || !KIE_API_KEY) return jsonResponse({ error: "KIE task status requires KIE_API_KEY." }, 503);
-      const path = type === "music" ? `/api/v1/generate/record-info?taskId=${encodeURIComponent(taskId)}` : `/api/v1/jobs/getTaskDetails?taskId=${encodeURIComponent(taskId)}`;
-      const response = await kieFetch(path);
-      const raw = await response.text(); let data: any = null; try { data = JSON.parse(raw); } catch (_) {}
+      let response = await kieFetch(`/api/v1/jobs/getTaskDetails?taskId=${encodeURIComponent(taskId)}`);
+      let raw = await response.text();
+      let data: any = null; try { data = JSON.parse(raw); } catch (_) {}
+      if (!response.ok && (type === "music" || !type)) {
+        response = await kieFetch(`/api/v1/generate/record-info?taskId=${encodeURIComponent(taskId)}`);
+        raw = await response.text(); data = null; try { data = JSON.parse(raw); } catch (_) {}
+      }
       if (!response.ok) return jsonResponse({ error: data?.msg || data?.error?.message || raw || `KIE status returned HTTP ${response.status}.` }, response.status);
       return jsonResponse({ ...data, output_url: outputUrl(data), user_id: user.id });
     }
