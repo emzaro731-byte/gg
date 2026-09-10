@@ -36,6 +36,12 @@ jobs:
       - name: Link Supabase project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
+      - name: Apply database migrations
+        shell: bash
+        run: |
+          test -n "$SUPABASE_DB_PASSWORD" || { echo 'Missing GitHub secret: SUPABASE_DB_PASSWORD. Database migrations were not applied.'; exit 1; }
+          supabase db push --linked --yes
+
       - name: Deploy GG AI
         run: supabase functions deploy gg-ai-chat --no-verify-jwt
 

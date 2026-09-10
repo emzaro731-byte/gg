@@ -34,7 +34,7 @@ jobs:
           marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
           if marker not in s:
               raise SystemExit('AndroidManifest.xml manifest tag not found')
-          permissions = ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.RECORD_AUDIO','android.permission.CAMERA','android.permission.MODIFY_AUDIO_SETTINGS','android.permission.BLUETOOTH','android.permission.BLUETOOTH_CONNECT']
+          permissions = ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.RECORD_AUDIO','android.permission.CAMERA','android.permission.MODIFY_AUDIO_SETTINGS','android.permission.BLUETOOTH','android.permission.BLUETOOTH_CONNECT','android.permission.POST_NOTIFICATIONS','android.permission.USE_FULL_SCREEN_INTENT']
           additions = ''.join(f'    <uses-permission android:name="{permission}" />\n' for permission in permissions if permission not in s)
           if additions: s = s.replace(marker, marker + '\n' + additions, 1)
           s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/gg_logo"')
@@ -59,6 +59,8 @@ jobs:
         run: python3 tool/upgrade_chat_ui.py
       - name: Fix chat composer Dart syntax
         run: python3 tool/fix_chat_syntax.py
+      - name: Fix GG chat send button and call ringing
+        run: python3 tool/fix_runtime_chat_calls.py
       - name: Preserve chat during realtime reconnects
         run: python3 tool/fix_chat_stream.py
       - name: Verify committed GG branding is used
