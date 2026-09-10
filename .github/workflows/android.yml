@@ -24,7 +24,7 @@ jobs:
           cache: true
       - name: Create Android platform if missing
         run: if [ ! -d android ]; then flutter create --platforms=android --project-name gg_messenger .; fi
-      - name: Configure Android permissions for chat, calls and media
+      - name: Configure Android permissions and use GG logo as app icon
         shell: bash
         run: |
           python3 - <<'PY'
@@ -50,7 +50,9 @@ jobs:
           )
           if additions:
               s = s.replace(marker, marker + '\n' + additions, 1)
-              p.write_text(s)
+          s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/gg_logo"')
+          s = s.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/gg_logo"')
+          p.write_text(s)
           PY
           for p in android.permission.INTERNET android.permission.ACCESS_NETWORK_STATE android.permission.RECORD_AUDIO android.permission.CAMERA android.permission.MODIFY_AUDIO_SETTINGS; do grep -q "$p" android/app/src/main/AndroidManifest.xml; done
       - name: Setup Java 17
@@ -61,29 +63,27 @@ jobs:
           cache: gradle
       - name: Install SVG converter
         run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
-      - name: Prepare GG logo
+      - name: Install the user's GG logo everywhere branding is required
         run: |
           test -s assets/branding/gg_logo.svg
+          mkdir -p android/app/src/main/res/drawable
           rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o assets/branding/gg_logo.png
+          rsvg-convert -w 1024 -h 1024 assets/branding/gg_logo.svg -o android/app/src/main/res/drawable/gg_logo.png
           test -s assets/branding/gg_logo.png
+          test -s android/app/src/main/res/drawable/gg_logo.png
       - name: Get dependencies
         run: flutter pub get
       - name: Apply premium chat UI
         run: python3 tool/upgrade_chat_ui.py
       - name: Preserve chat during realtime reconnects
         run: python3 tool/fix_chat_stream.py
-      - name: Generate GG launcher icon
-        run: dart run flutter_launcher_icons
-      - name: Verify Android network, call permissions and launcher configuration
+      - name: Verify GG branding is used
         run: |
+          test -s assets/branding/gg_logo.svg
           test -s assets/branding/gg_logo.png
-          test -s android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.ACCESS_NETWORK_STATE' android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.RECORD_AUDIO' android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.CAMERA' android/app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.MODIFY_AUDIO_SETTINGS' android/app/src/main/AndroidManifest.xml
-          grep -q 'android:icon="@mipmap/launcher_icon"' android/app/src/main/AndroidManifest.xml || grep -q 'android:icon="@mipmap/ic_launcher"' android/app/src/main/AndroidManifest.xml
+          test -s android/app/src/main/res/drawable/gg_logo.png
+          grep -q 'android:icon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@drawable/gg_logo"' android/app/src/main/AndroidManifest.xml || true
       - name: Remove generated template test
         run: rm -f test/widget_test.dart
       - name: Analyze code (non-blocking)
