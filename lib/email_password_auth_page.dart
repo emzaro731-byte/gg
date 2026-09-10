@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'gg_brand.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -220,8 +222,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -231,20 +231,7 @@ class _LoginPageState extends State<LoginPage> {
               constraints: const BoxConstraints(maxWidth: 430),
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [scheme.primary, scheme.tertiary],
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.forum_rounded,
-                      size: 54,
-                      color: scheme.onPrimary,
-                    ),
-                  ),
+                  const GGBrandMark(size: 108, showGlow: true),
                   const SizedBox(height: 18),
                   Text(
                     'GG Messenger',
@@ -327,7 +314,7 @@ class _LoginPageState extends State<LoginPage> {
                         notice!,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: scheme.primary,
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -339,7 +326,7 @@ class _LoginPageState extends State<LoginPage> {
                         error!,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: scheme.error,
+                          color: Theme.of(context).colorScheme.error,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -458,8 +445,6 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -469,20 +454,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
               constraints: const BoxConstraints(maxWidth: 430),
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [scheme.primary, scheme.tertiary],
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.lock_reset_rounded,
-                      size: 54,
-                      color: scheme.onPrimary,
-                    ),
-                  ),
+                  const GGBrandMark(size: 108, showGlow: true),
                   const SizedBox(height: 18),
                   Text(
                     'Reset password',
@@ -530,7 +502,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
                         notice!,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: scheme.primary,
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -541,7 +513,9 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
                       child: Text(
                         error!,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.error),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
                   SizedBox(
