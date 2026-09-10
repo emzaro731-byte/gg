@@ -41,6 +41,9 @@ jobs:
       - name: Verify GG logo asset
         run: test -s assets/branding/gg_logo.svg
 
+      - name: Remove generated Flutter sample test
+        run: rm -f test/widget_test.dart
+
       - name: Format Dart sources
         run: dart format lib
 
