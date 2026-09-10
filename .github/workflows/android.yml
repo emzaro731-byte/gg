@@ -39,12 +39,12 @@ jobs:
               'android.permission.ACCESS_NETWORK_STATE',
           ]
           additions = ''.join(
-              f'    <uses-permission android:name="{permission}" />\\n'
+              f'    <uses-permission android:name="{permission}" />\n'
               for permission in permissions
               if permission not in s
           )
           if additions:
-              s = s.replace(marker, marker + '\\n' + additions, 1)
+              s = s.replace(marker, marker + '\n' + additions, 1)
               p.write_text(s)
           PY
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
@@ -64,6 +64,8 @@ jobs:
           test -s assets/branding/gg_logo.png
       - name: Get dependencies
         run: flutter pub get
+      - name: Apply premium chat UI
+        run: python3 tool/upgrade_chat_ui.py
       - name: Generate GG launcher icon
         run: dart run flutter_launcher_icons
       - name: Verify Android network and launcher configuration
