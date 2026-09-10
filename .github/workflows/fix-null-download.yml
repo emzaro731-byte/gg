@@ -26,10 +26,18 @@ jobs:
           s = p.read_text()
           old = 'if (saved.isEmpty) setState(() => error = \'The download was handed to Android, but the saved path was not returned. Check Downloads.\');'
           new = 'if (saved?.isEmpty == true) setState(() => error = \'The download was handed to Android, but the saved path was not returned. Check Downloads.\');'
-          if old not in s:
-              raise SystemExit('Expected nullable FileSaver expression was not found.')
-          p.write_text(s.replace(old, new, 1))
+          if old in s:
+              p.write_text(s.replace(old, new, 1))
+              print('Fixed saved.isEmpty')
+          elif 'if (saved?.isEmpty == true)' in s:
+              print('Nullable check is already fixed')
+          else:
+              raise SystemExit('Could not find the nullable FileSaver check.')
           PY
+      - name: Verify source fix
+        shell: bash
+        run: |
+          grep -F "saved?.isEmpty == true" lib/gg_image_page.dart
       - name: Commit fix
         shell: bash
         run: |
