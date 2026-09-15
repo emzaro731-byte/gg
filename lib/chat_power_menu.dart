@@ -34,7 +34,18 @@ Future<String?> chooseDisappearingDuration(BuildContext context, String current)
     context: context,
     builder: (_) => AlertDialog(
       title: const Text('Disappearing messages'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: values.entries.map((e) => RadioListTile<String>(value: e.key, groupValue: current, title: Text(e.value), onChanged: (v) => Navigator.pop(context, v))).toList()),
+      content: RadioGroup<String>(
+        groupValue: current,
+        onChanged: (value) {
+          if (value != null) Navigator.pop(context, value);
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: values.entries
+              .map((e) => RadioListTile<String>(value: e.key, title: Text(e.value)))
+              .toList(),
+        ),
+      ),
     ),
   );
 }
@@ -45,7 +56,18 @@ Future<String?> chooseWallpaper(BuildContext context, String current) async {
     context: context,
     builder: (_) => AlertDialog(
       title: const Text('Chat wallpaper'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: values.entries.map((e) => RadioListTile<String>(value: e.key, groupValue: current, title: Text(e.value), onChanged: (v) => Navigator.pop(context, v))).toList()),
+      content: RadioGroup<String>(
+        groupValue: current,
+        onChanged: (value) {
+          if (value != null) Navigator.pop(context, value);
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: values.entries
+              .map((e) => RadioListTile<String>(value: e.key, title: Text(e.value)))
+              .toList(),
+        ),
+      ),
     ),
   );
 }
