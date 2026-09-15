@@ -122,22 +122,6 @@ class _CachedChatState extends State<_CachedChat> {
     });
   }
 
-  Future<String?> _otherMemberId() async {
-    final me = userId;
-    if (me == null) return null;
-    try {
-      final rows = await supabase
-          .from('conversation_members')
-          .select('user_id')
-          .eq('conversation_id', widget.conversationId)
-          .neq('user_id', me)
-          .limit(1);
-      return rows.isEmpty ? null : rows.first['user_id']?.toString();
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _startCall(bool video) async {
     // Calls require a live Supabase connection. Keep the controls visible,
     // just explain why they are unavailable while this cached screen is open.
